@@ -1,0 +1,209 @@
+use std::collections::HashMap;
+
+use crate::asm_lexer::{self, Register, Token};
+use logos::Span;
+
+type ParserError = (String, Span);
+type Result<T> = std::result::Result<T, ParserError>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// These are constraints for the parser to check instructions against.
+enum OperandType {
+    Register,
+    Flag,
+    SignedImm8,
+    Imm8,
+    Imm16,
+    Addr16,
+    AddrLabel,
+}
+
+#[derive(Debug, Clone)]
+/// These are the values parsed
+enum Operand {
+    Immediate(u8),
+    Address(u16),
+    Register(asm_lexer::Register),
+}
+
+struct OpcodeDesc {
+    mnemonic: &'static str,
+    opcode: Opcode,
+    operands: &'static [OperandType],
+    encoding: u8,
+}
+
+static OPCODES: &[OpcodeDesc] = &[
+    OpcodeDesc {
+        mnemonic: "nop",
+        opcode: Opcode::Nop,
+        operands: &[],
+        encoding: 0x00,
+    },
+    OpcodeDesc {
+        mnemonic: "stop",
+        opcode: Opcode::Stop,
+        operands: &[],
+        encoding: 0x01,
+    },
+    // Problem: looks like this is a bad data structure!
+    // GB opcodes are actually encoded based on the register operands.
+    // This means that LD B, B is actually encoded differently to LD B, A.
+    // OpcodeDesc {
+    //     mnemonic: "ld",
+    //     opcode: Opcode::Load,
+    //     operands: &[OperandType::Register, OperandType::Register],
+    //     encoding,
+    // },
+];
+
+lazy_static::lazy_static! {
+static ref OPCODEMAP: HashMap<&'static str, Vec<&'static OpcodeDesc>> = {
+    let mut map: HashMap<&'static str, Vec<&'static OpcodeDesc>> = HashMap::new();
+
+    for op in OPCODES {
+        map.entry(op.mnemonic)
+        .or_insert_with(Vec::new).push(op);
+    }
+    map
+};
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Opcode {
+    Nop,
+    Stop,
+    Load,
+    Increment,
+    Decrement,
+    Rotate,
+    Add,
+    Sub,
+    AddCarry,
+    SubCarry,
+    And,
+    Xor,
+    Or,
+    Compare,
+    Call,
+    Return,
+    Pop,
+    Push,
+    Jump,
+    JumpRelative,
+    Daa,
+    Complement,
+    FlipFlag,
+    SetFlag,
+    Halt,
+}
+
+#[derive(Debug)]
+pub struct Instruction {
+    opcode: Opcode,
+    operands: Vec<Operand>,
+    encoding: u8,
+}
+
+#[derive(Debug)]
+pub enum Identifier {
+    Instruction(Instruction),
+    Label,
+}
+
+#[derive(Debug)]
+pub enum Value {
+    Instruction(Instruction),
+    Directive,
+}
+
+pub fn parse(lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
+    if let Some(token) = lexer.next() {
+        match token {
+            Ok(Token::Identifier) => parse_identifier(lexer.slice(), lexer),
+            _ => Err(("Parser Error".to_owned(), lexer.span())),
+        }
+    } else {
+        Err((("No tokens provided?").to_owned(), lexer.span()))
+    }
+}
+
+fn match_operand_description(
+    operand_types: Vec<OperandType>,
+    options: Vec<&OpcodeDesc>,
+) -> Option<&OpcodeDesc> {
+    options.into_iter().find(|x| x.operands.eq(&operand_types))
+}
+
+// We have already consumed the identifier token
+fn parse_identifier(identifier_token: &str, lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
+    let span = lexer.span();
+
+    if OPCODEMAP.contains_key(lexer.slice()) {
+        return parse_instruction(lexer.slice(), lexer);
+    }
+
+    while let Some(token) = lexer.next() {
+        // What are the valid identifier types?
+        // - All of the OperandType enums
+        // - data label
+        //
+        match token {
+            // labels are marked by a colon
+            Ok(Token::Colon) => return parse_label(identifier_token, lexer),
+            _ => todo!(),
+        }
+    }
+    Err(("Unexpected identifier found here".to_owned(), span))
+}
+
+// The colon token has already been consumed
+fn parse_label(label_token: &str, lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
+    todo!()
+}
+
+// Assume we have already consumed the mnemonic for the instruction (instr_token)
+// Slight problem. Might need to do more of the parent skeleton to work out who will
+// call this function, and therefore when this function stops. In other words, this all
+// needs to be structured to use a peekable iterator in order to implement lookahead.
+fn parse_instruction(instr_token: &str, lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
+    let span = lexer.span();
+    let mut parsed_operands: Vec<Operand> = Vec::new();
+    let mut parsed_operand_types: Vec<OperandType> = Vec::new();
+
+    // We now need to iterate through all future tokens until we get another 'instruction'.
+    // Maybe use peekable?
+    while let Some(token) = lexer.next() {
+        match token {
+            // For now, just support registers
+            Ok(Token::Register(r)) => {
+                parsed_operands.push(Operand::Register(r));
+                parsed_operand_types.push(OperandType::Register);
+            }
+            // We have arrived at another instruction.
+            Ok(Token::Newline) => {
+                // We already know that there is a value for this based on who
+                // called parse_instruction so we can directly get the value for this key.
+                let options = &OPCODEMAP[instr_token];
+
+                // Check if it is valid based on the options we collected earlier
+                if let Some(matched_op_desc) =
+                    match_operand_description(parsed_operand_types, options.to_vec())
+                {
+                    let instruction: Instruction = Instruction {
+                        opcode: matched_op_desc.opcode,
+                        operands: parsed_operands,
+                        encoding: matched_op_desc.encoding,
+                    };
+                    return Ok(Value::Instruction(instruction));
+                } else {
+                    return Err((("Invalid operands for instruction").to_owned(), span));
+                }
+            }
+            // Other possible operands will be supported later.
+            Ok(_) => todo!(),
+            _ => todo!(),
+        }
+    }
+    Err(("instruction parsing error".to_owned(), span))
+}

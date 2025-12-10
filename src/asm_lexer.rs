@@ -2,7 +2,7 @@ use core::panic;
 
 use logos::{Lexer, Logos};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Register {
     A,
     B,
@@ -14,6 +14,8 @@ pub enum Register {
     BC,
     DE,
     HL,
+    PC,
+    SP,
 }
 
 fn register_callback(lex: &mut Lexer<Token>) -> Option<Register> {
@@ -31,18 +33,22 @@ fn register_callback(lex: &mut Lexer<Token>) -> Option<Register> {
         "bc" => Some(Register::BC),
         "de" => Some(Register::DE),
         "hl" => Some(Register::HL),
+        "pc" => Some(Register::PC),
+        "sp" => Some(Register::SP),
         _ => None,
     }
 }
 
 #[derive(Logos, Debug, PartialEq)]
-#[logos(skip r"[ \t\n]+")]
+#[logos(skip r"[ \t]+")]
 #[logos(error = String)]
 pub enum Token {
-    // Directives
-    // #[regex(r"\.[a-z]+")]
-    // Directive,
-    // Labels
+    #[token("\n")]
+    Newline,
+
+    #[regex(r"\.(\w)+")]
+    Directive,
+
     #[token(",")]
     Comma,
 
@@ -52,27 +58,26 @@ pub enum Token {
     #[token(".")]
     Period,
 
-    #[token("\"")]
-    DoubleQuote,
+    #[token("-")]
+    Dash,
 
-    #[token("!")]
-    ExclamationMark,
+    #[token("(")]
+    LeftParenthesis,
 
-    #[token("=")]
-    Equals,
+    #[token(")")]
+    RightParenthesis,
+
+    // Excludes //, delimiters, and '"'
+    #[regex(r#""([^"\\]|\\.)*""#)]
+    StringLiteral,
 
     #[regex(r"\w+")]
     Identifier,
 
-    // Match to an enum
-    // #[regex(r"[a-z]+")]
-    // Instruction,
-
-    // Need to match this to a specific register?
     #[regex(r"%[a-z][a-z]?", register_callback)]
     Register(Register),
 
-    // Change this to include a specific
+    // Need to include signed 8-bit numbers? Might need several enums for this.
     #[regex("#[0-9]+", |lex| lex.slice()[1..].parse::<u8>().unwrap())]
     Integer(u8),
 }
