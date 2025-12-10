@@ -1,18 +1,31 @@
-mod asm_lexer;
+use crate::lexer::Token;
+use logos::Logos;
+
+mod gb;
+mod lexer;
+mod parser;
 
 fn main() {
-    // let input = "ld %a, #5";
-    // let input = "%a, %b, %c, %bc, #5, ld, .global";
+    // let input = "
+    //     .section .data
+    // str:    .asciz \"Hello, world!\"
+
+    //     .section .text
+    //     .global _start
+
+    // _start:
+    //     ld %a, #5
+    // ";
     let input = "
-        .section .data
-    str:    .asciz \"Hello, world!\"
-        
-        .section .text
-        .global _start
-    
-    _start:
-        ld a, #5
+        ld %a, $bc
+        ld %a, #5
     ";
 
-    let _tokens = asm_lexer::tokenize(input);
+    println!("==================== Lexer =====================");
+    // let _tokens = lexer::tokenize(input);
+    println!("==================== /Lexer ====================");
+    println!("==================== Parser ====================");
+    let mut lexer = Token::lexer(input);
+    let _instr = parser::parse(&mut lexer).unwrap();
+    println!("==================== /Parser ===================");
 }

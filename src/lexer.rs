@@ -1,20 +1,7 @@
 use core::panic;
 
+use crate::gb::register::{Register, Register16, Register8, RegisterPtr16, RegisterPtr8};
 use logos::{Lexer, Logos};
-
-#[derive(Debug, PartialEq)]
-pub enum Register {
-    A,
-    B,
-    C,
-    D,
-    E,
-    H,
-    L,
-    BC,
-    DE,
-    HL,
-}
 
 fn register_callback(lex: &mut Lexer<Token>) -> Option<Register> {
     let slice = lex.slice();
@@ -31,18 +18,22 @@ fn register_callback(lex: &mut Lexer<Token>) -> Option<Register> {
         "bc" => Some(Register::BC),
         "de" => Some(Register::DE),
         "hl" => Some(Register::HL),
+        "pc" => Some(Register::PC),
+        "sp" => Some(Register::SP),
         _ => None,
     }
 }
 
 #[derive(Logos, Debug, PartialEq)]
-#[logos(skip r"[ \t\n]+")]
+#[logos(skip r"[ \t]+")]
 #[logos(error = String)]
 pub enum Token {
-    // Directives
-    // #[regex(r"\.[a-z]+")]
-    // Directive,
-    // Labels
+    #[token("\n")]
+    Newline,
+
+    #[regex(r"\.(\w)+")]
+    Directive,
+
     #[token(",")]
     Comma,
 
@@ -52,29 +43,34 @@ pub enum Token {
     #[token(".")]
     Period,
 
-    #[token("\"")]
-    DoubleQuote,
+    #[token("-")]
+    Dash,
 
-    #[token("!")]
-    ExclamationMark,
+    #[token("(")]
+    LeftParenthesis,
 
-    #[token("=")]
-    Equals,
+    #[token(")")]
+    RightParenthesis,
+
+    // Excludes //, delimiters, and '"'
+    #[regex(r#""([^"\\]|\\.)*""#)]
+    StringLiteral,
 
     #[regex(r"\w+")]
     Identifier,
 
-    // Match to an enum
-    // #[regex(r"[a-z]+")]
-    // Instruction,
-
-    // Need to match this to a specific register?
     #[regex(r"%[a-z][a-z]?", register_callback)]
     Register(Register),
 
-    // Change this to include a specific
-    #[regex("#[0-9]+", |lex| lex.slice()[1..].parse::<u8>().unwrap())]
-    Integer(u8),
+    #[regex(r"\$[a-z][a-z]?", register_callback)]
+    RegisterPtr(Register),
+
+    // Need to include signed 8-bit numbers? Might need several enums for this.
+    #[regex("#[0-9]+", |lex| lex.slice()[1..].parse::<u16>().unwrap())]
+    Integer(u16),
+
+    #[regex(r"\$[0-9]+", |lex| lex.slice()[1..].parse::<u16>().unwrap())]
+    IntegerPointer(u16),
 }
 
 pub fn tokenize(src: &str) {
