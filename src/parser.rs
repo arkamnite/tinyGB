@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::asm_lexer::{self, Register, Token};
+use crate::gb::instruction::{Instruction, OpcodeDesc};
+use crate::gb::register::Register;
+use crate::lexer::Token;
 use logos::Span;
 
 type ParserError = (String, Span);
@@ -23,39 +25,8 @@ enum OperandType {
 enum Operand {
     Immediate(u8),
     Address(u16),
-    Register(asm_lexer::Register),
+    Register(Register),
 }
-
-struct OpcodeDesc {
-    mnemonic: &'static str,
-    opcode: Opcode,
-    operands: &'static [OperandType],
-    encoding: u8,
-}
-
-static OPCODES: &[OpcodeDesc] = &[
-    OpcodeDesc {
-        mnemonic: "nop",
-        opcode: Opcode::Nop,
-        operands: &[],
-        encoding: 0x00,
-    },
-    OpcodeDesc {
-        mnemonic: "stop",
-        opcode: Opcode::Stop,
-        operands: &[],
-        encoding: 0x01,
-    },
-    // Problem: looks like this is a bad data structure!
-    // GB opcodes are actually encoded based on the register operands.
-    // This means that LD B, B is actually encoded differently to LD B, A.
-    // OpcodeDesc {
-    //     mnemonic: "ld",
-    //     opcode: Opcode::Load,
-    //     operands: &[OperandType::Register, OperandType::Register],
-    //     encoding,
-    // },
-];
 
 lazy_static::lazy_static! {
 static ref OPCODEMAP: HashMap<&'static str, Vec<&'static OpcodeDesc>> = {
@@ -67,42 +38,6 @@ static ref OPCODEMAP: HashMap<&'static str, Vec<&'static OpcodeDesc>> = {
     }
     map
 };
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Opcode {
-    Nop,
-    Stop,
-    Load,
-    Increment,
-    Decrement,
-    Rotate,
-    Add,
-    Sub,
-    AddCarry,
-    SubCarry,
-    And,
-    Xor,
-    Or,
-    Compare,
-    Call,
-    Return,
-    Pop,
-    Push,
-    Jump,
-    JumpRelative,
-    Daa,
-    Complement,
-    FlipFlag,
-    SetFlag,
-    Halt,
-}
-
-#[derive(Debug)]
-pub struct Instruction {
-    opcode: Opcode,
-    operands: Vec<Operand>,
-    encoding: u8,
 }
 
 #[derive(Debug)]
@@ -177,8 +112,8 @@ fn parse_instruction(instr_token: &str, lexer: &mut logos::Lexer<'_, Token>) -> 
         match token {
             // For now, just support registers
             Ok(Token::Register(r)) => {
-                parsed_operands.push(Operand::Register(r));
-                parsed_operand_types.push(OperandType::Register);
+                parsed_operands.push(Operand::Register(r.clone()));
+                // parsed_operand_types.push(OperandType::Register(r));
             }
             // We have arrived at another instruction.
             Ok(Token::Newline) => {

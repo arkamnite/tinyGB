@@ -1,22 +1,7 @@
 use core::panic;
 
+use crate::gb::register::Register;
 use logos::{Lexer, Logos};
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Register {
-    A,
-    B,
-    C,
-    D,
-    E,
-    H,
-    L,
-    BC,
-    DE,
-    HL,
-    PC,
-    SP,
-}
 
 fn register_callback(lex: &mut Lexer<Token>) -> Option<Register> {
     let slice = lex.slice();
