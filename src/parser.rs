@@ -8,50 +8,6 @@ use logos::Span;
 type ParserError = (String, Span);
 type Result<T> = std::result::Result<T, ParserError>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-/// These are constraints for the parser to check instructions against.
-enum OperandType {
-    Register,
-    Flag,
-    SignedImm8,
-    Imm8,
-    Imm16,
-    Addr16,
-    AddrLabel,
-}
-
-#[derive(Debug, Clone)]
-/// These are the values parsed
-enum Operand {
-    Immediate(u8),
-    Address(u16),
-    Register(Register),
-}
-
-lazy_static::lazy_static! {
-static ref OPCODEMAP: HashMap<&'static str, Vec<&'static OpcodeDesc>> = {
-    let mut map: HashMap<&'static str, Vec<&'static OpcodeDesc>> = HashMap::new();
-
-    for op in OPCODES {
-        map.entry(op.mnemonic)
-        .or_insert_with(Vec::new).push(op);
-    }
-    map
-};
-}
-
-#[derive(Debug)]
-pub enum Identifier {
-    Instruction(Instruction),
-    Label,
-}
-
-#[derive(Debug)]
-pub enum Value {
-    Instruction(Instruction),
-    Directive,
-}
-
 pub fn parse(lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
     if let Some(token) = lexer.next() {
         match token {

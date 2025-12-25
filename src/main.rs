@@ -15,6 +15,7 @@ fn main() {
     // ";
     let input = "
         ld %a, #5
+        ld %a, $bc
     ";
 
     let _tokens = lexer::tokenize(input);

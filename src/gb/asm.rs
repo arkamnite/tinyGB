@@ -1,5 +1,5 @@
 pub trait Encodable {
-    fn encode(&self) -> String;
+    fn encode(&self) -> u8;
 }
 
 pub trait PrintAsm {
