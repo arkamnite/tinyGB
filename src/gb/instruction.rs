@@ -1,17 +1,42 @@
 /* Operand Description */
 
-use std::{collections::HashMap, u8};
+use std::{collections::HashMap, fmt, u8};
 
 use crate::gb::{
     asm::Encodable,
-    register::{PushPopRegister16, Register16, Register8, RegisterAddr16, RegisterAddr8},
+    register::{PushPopRegister16, Register16, Register8, RegisterPtr16, RegisterPtr8},
 };
 
 #[derive(Debug, Clone, Copy)]
-enum Opcode {
+pub enum Opcode {
     Nop,
     Stop,
     Load,
+    LoadIncrement,
+    LoadDecrement,
+}
+
+impl fmt::Display for Opcode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Opcode::Nop => write!(f, "nop"),
+            Opcode::Stop => write!(f, "stop"),
+            Opcode::Load => write!(f, "ld"),
+            Opcode::LoadIncrement => write!(f, "ldi"),
+            Opcode::LoadDecrement => write!(f, "ldd"),
+        }
+    }
+}
+
+pub fn match_opcode(token: String) -> Option<Opcode> {
+    match token.as_str() {
+        "nop" => Some(Opcode::Nop),
+        "stop" => Some(Opcode::Stop),
+        "ld" => Some(Opcode::Load),
+        "ldi" => Some(Opcode::LoadIncrement),
+        "ldd" => Some(Opcode::LoadDecrement),
+        _ => None,
+    }
 }
 
 // #[derive(Debug)]
@@ -32,9 +57,9 @@ enum Opcode {
 #[derive(Debug, Clone)]
 pub enum Operand {
     Register8(Register8),
-    RegisterAddr8(RegisterAddr8),
+    RegisterPtr8(RegisterPtr8),
     Register16(Register16),
-    RegisterAddr16(RegisterAddr16),
+    RegisterPtr16(RegisterPtr16),
     PushPopRegister16(PushPopRegister16),
     Imm8(u8),
     Imm16(u16),
@@ -44,12 +69,12 @@ pub enum Operand {
 }
 
 impl Operand {
-    fn gen_placeholder(&self) -> String {
+    pub fn gen_placeholder(&self) -> String {
         (match self {
             Operand::Register8(_) => "r",
-            Operand::RegisterAddr8(_) => "$r",
+            Operand::RegisterPtr8(_) => "$r",
             Operand::Register16(_) => "dd",
-            Operand::RegisterAddr16(_) => "$dd",
+            Operand::RegisterPtr16(_) => "$dd",
             Operand::PushPopRegister16(_) => "qq",
             Operand::Imm8(_) => "n",
             Operand::Imm16(_) => "nn",
@@ -58,6 +83,23 @@ impl Operand {
             Operand::Ptr16(_) => "$nn",
         })
         .to_string()
+    }
+}
+
+impl fmt::Display for Operand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Operand::Register8(_) => write!(f, "r"),
+            Operand::RegisterPtr8(_) => write!(f, "$r"),
+            Operand::Register16(_) => write!(f, "dd"),
+            Operand::RegisterPtr16(_) => write!(f, "$dd"),
+            Operand::PushPopRegister16(_) => write!(f, "qq"),
+            Operand::Imm8(_) => write!(f, "n"),
+            Operand::Imm16(_) => write!(f, "nn"),
+            Operand::SignedImm4(_) => write!(f, "e"),
+            Operand::Ptr8(_) => write!(f, "$n"),
+            Operand::Ptr16(_) => write!(f, "$nn"),
+        }
     }
 }
 
@@ -182,6 +224,9 @@ pub struct OpcodeDesc {
     /// building the map based on the register/operand
     /// class, utilising PrintAsm trait?
     mnemonic: &'static str,
+    /// This should eventually generate the "base" value
+    /// for the instruction that the operands are then
+    /// OR'd into.
     opcode: Opcode,
     encoding: InstructionEncoding,
 }
@@ -191,6 +236,10 @@ pub struct Instruction {
     opcode: Opcode,
     operands: Vec<Operand>,
     encoding: u8,
+    /// Currently unused, but will later
+    /// be used to decide which region
+    /// to place this
+    region: u16,
 }
 
 /// This should really be a table that can
@@ -315,14 +364,14 @@ static OPCODES: &[OpcodeDesc] = &[
     },
     // LD A, (HL+)
     OpcodeDesc {
-        mnemonic: "ld %a, $hli",
-        opcode: Opcode::Load,
+        mnemonic: "ldi %a, $hl",
+        opcode: Opcode::LoadIncrement,
         encoding: InstructionEncoding::Fixed { base: 0b11101010 },
     },
     // LD A, (HL-)
     OpcodeDesc {
-        mnemonic: "ld %a, $hld",
-        opcode: Opcode::Load,
+        mnemonic: "ldd %a, $hl",
+        opcode: Opcode::LoadDecrement,
         encoding: InstructionEncoding::Fixed { base: 0b00111010 },
     },
     // LD (BC), A
@@ -339,26 +388,42 @@ static OPCODES: &[OpcodeDesc] = &[
     },
     // LD (HL+), A
     OpcodeDesc {
-        mnemonic: "ld $hli, %a",
-        opcode: Opcode::Load,
+        mnemonic: "ldi $hl, %a",
+        opcode: Opcode::LoadIncrement,
         encoding: InstructionEncoding::Fixed { base: 0b00100010 },
     },
     // LD (HL-), A
     OpcodeDesc {
-        mnemonic: "ld $hld, %a",
-        opcode: Opcode::Load,
+        mnemonic: "ldd $hl, %a",
+        opcode: Opcode::LoadDecrement,
         encoding: InstructionEncoding::Fixed { base: 0b00110010 },
     },
 ];
 
 lazy_static::lazy_static! {
-static ref OPCODEMAP: HashMap<&'static str, Vec<&'static OpcodeDesc>> = {
-    let mut map: HashMap<&'static str, Vec<&'static OpcodeDesc>> = HashMap::new();
+static ref OPCODEMAP: HashMap<&'static str, &'static OpcodeDesc> = {
+    let mut map: HashMap<&'static str, &'static OpcodeDesc> = HashMap::new();
 
     for op in OPCODES {
         map.entry(op.mnemonic)
-        .or_insert_with(Vec::new).push(op);
+        .or_insert_with(|| op);
     }
     map
 };
+}
+
+pub fn find_instruction(mnemonic: String, operands: &Vec<Operand>) -> Result<Vec<u8>, String> {
+    if let Some(&desc) = OPCODEMAP.get(mnemonic.as_str()) {
+        if let Some(enc) = desc.encoding.encode(&operands) {
+            return Ok(enc);
+        } else {
+            return Err(format!(
+                "Invalid operands provided for instruction with opcode {:?}",
+                desc.opcode,
+            )
+            .to_owned());
+        }
+    } else {
+        return Err(format!("Could not find instruction for: {}", mnemonic).to_owned());
+    }
 }

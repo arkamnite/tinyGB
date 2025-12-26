@@ -41,8 +41,24 @@ impl Encodable for Register8 {
     }
 }
 
+impl TryFrom<Register> for Register8 {
+    type Error = (&'static str, Register);
+    fn try_from(value: Register) -> Result<Self, Self::Error> {
+        match value {
+            Register::A => Ok(Register8::A),
+            Register::B => Ok(Register8::B),
+            Register::C => Ok(Register8::C),
+            Register::D => Ok(Register8::D),
+            Register::E => Ok(Register8::E),
+            Register::H => Ok(Register8::H),
+            Register::L => Ok(Register8::L),
+            _ => Err(("Invalid 8-bit register provided!", value)),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Eq, Copy)]
-pub enum RegisterAddr8 {
+pub enum RegisterPtr8 {
     A,
     C,
 }
@@ -81,7 +97,7 @@ impl PrintAsm for Register16 {
 /// TODO: Notably absent here is the HLI and HLD
 /// operands; these must be supported later.
 #[derive(Debug, PartialEq, Clone, Eq, Copy)]
-pub enum RegisterAddr16 {
+pub enum RegisterPtr16 {
     Bc,
     De,
     Hl,

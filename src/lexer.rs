@@ -1,6 +1,6 @@
 use core::panic;
 
-use crate::gb::register::Register;
+use crate::gb::register::{Register, Register16, Register8, RegisterPtr16, RegisterPtr8};
 use logos::{Lexer, Logos};
 
 fn register_callback(lex: &mut Lexer<Token>) -> Option<Register> {
@@ -63,11 +63,14 @@ pub enum Token {
     Register(Register),
 
     #[regex(r"\$[a-z][a-z]?", register_callback)]
-    RegisterPointer(Register),
+    RegisterPtr(Register),
 
     // Need to include signed 8-bit numbers? Might need several enums for this.
-    #[regex("#[0-9]+", |lex| lex.slice()[1..].parse::<u8>().unwrap())]
-    Integer(u8),
+    #[regex("#[0-9]+", |lex| lex.slice()[1..].parse::<u16>().unwrap())]
+    Integer(u16),
+
+    #[regex(r"\$[0-9]+", |lex| lex.slice()[1..].parse::<u16>().unwrap())]
+    IntegerPointer(u16),
 }
 
 pub fn tokenize(src: &str) {

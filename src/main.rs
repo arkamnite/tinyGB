@@ -1,3 +1,6 @@
+use crate::lexer::Token;
+use logos::Logos;
+
 mod gb;
 mod lexer;
 mod parser;
@@ -14,9 +17,15 @@ fn main() {
     //     ld %a, #5
     // ";
     let input = "
-        ld %a, #5
         ld %a, $bc
+        ld %a, #5
     ";
 
-    let _tokens = lexer::tokenize(input);
+    println!("==================== Lexer =====================");
+    // let _tokens = lexer::tokenize(input);
+    println!("==================== /Lexer ====================");
+    println!("==================== Parser ====================");
+    let mut lexer = Token::lexer(input);
+    let _instr = parser::parse(&mut lexer).unwrap();
+    println!("==================== /Parser ===================");
 }
