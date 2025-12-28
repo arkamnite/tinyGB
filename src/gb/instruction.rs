@@ -6,8 +6,28 @@ use strum_macros::EnumDiscriminants;
 
 use crate::gb::{
     asm::Encodable,
-    register::{PushPopRegister16, Register16, Register8, RegisterA, RegisterPtr16, RegisterPtr8},
+    register::{
+        ARegister, CRegisterPtr, HLRegisterPtr, PushPopRegister16, Register16, Register8,
+        RegisterPtr16, RegisterPtr8,
+    },
 };
+
+#[derive(Debug, Clone, EnumDiscriminants)]
+pub enum Operand {
+    ARegister(ARegister),
+    CRegisterPtr(CRegisterPtr),
+    Register8(Register8),
+    RegisterPtr8(RegisterPtr8),
+    Register16(Register16),
+    RegisterPtr16(RegisterPtr16),
+    HLRegisterPtr(HLRegisterPtr),
+    PushPopRegister16(PushPopRegister16),
+    Imm8(u8),
+    Imm16(u16),
+    Ptr8(u8),
+    Ptr16(u16),
+    SignedImm4(u8),
+}
 
 pub struct OperandDesc {
     operand_type: OperandDiscriminants,
@@ -55,6 +75,9 @@ pub struct InstructionDesc {
 // encoding fn: InstructionDesc, InOperand, OutOperand -> Option<Vec<u8>>
 // - verify legal operands
 // - output operands as separate bytes if needed (i.e. imm values)
+//
+// note for later: might be a good idea to use a builder of sorts
+// for the byte(s). This could help simplify the legalisation logic?
 
 #[derive(Debug, Clone, Copy)]
 pub enum Opcode {
@@ -69,14 +92,17 @@ pub enum Opcode {
     LoadRdImm8,
 
     // ld %rd, $hl
-    // ld %a, {$bc, $de}
-    LoadRdRegPtr16,
+    LoadRdHLRegPtr,
     // ld $hl, %rr
-    // ld {$bc, $de}, %a
-    LoadRegPtr16Rr,
+    LoadHLRegPtrRr,
 
     // ld $hl, n
-    LoadRegPtr16Imm8,
+    LoadHLRegPtrImm8,
+
+    // ld %a, {$bc, $de}
+    LoadARegPtr16,
+    // ld {$bc, $de}, %a
+    LoadRegPtr16AReg,
 
     // ld %a, $c
     LoadRdRegPtr8,
@@ -104,210 +130,212 @@ pub enum Opcode {
     LoadDecRegPtr16Rr,
 }
 
-impl fmt::Display for Opcode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Opcode::Nop => write!(f, "nop"),
-            Opcode::Stop => write!(f, "stop"),
-            Opcode::Load => write!(f, "ld"),
-            Opcode::LoadIncrement => write!(f, "ldi"),
-            Opcode::LoadDecrement => write!(f, "ldd"),
-        }
-    }
-}
-
-pub fn match_opcode(token: String) -> Option<Opcode> {
-    match token.as_str() {
-        "nop" => Some(Opcode::Nop),
-        "stop" => Some(Opcode::Stop),
-        "ld" => Some(Opcode::Load),
-        "ldi" => Some(Opcode::LoadIncrement),
-        "ldd" => Some(Opcode::LoadDecrement),
-        _ => None,
-    }
-}
-
-// #[derive(Debug)]
-/// Different types that an operand can take.
-/// TODO: Macro to generate another wrapped enum
-/// that can be used to construct 'Instruction',
-/// i.e. a struct that has actual values for these variants.
-///
-/// Do we need this if we are going to use InstructionEncoding?
-// pub enum OperandType {
-//     Register8,
-//     RegisterAddr8,
-//     Register16,
-//     RegisterAddr16,
-//     PushPopRegister16,
-// }
-
-#[derive(Debug, Clone, EnumDiscriminants)]
-pub enum Operand {
-    RegisterA(RegisterA),
-    Register8(Register8),
-    RegisterPtr8(RegisterPtr8),
-    Register16(Register16),
-    RegisterPtr16(RegisterPtr16),
-    PushPopRegister16(PushPopRegister16),
-    Imm8(u8),
-    Imm16(u16),
-    Ptr8(u8),
-    Ptr16(u16),
-    SignedImm4(u8),
-}
-
-impl Operand {
-    pub fn gen_placeholder(&self) -> String {
-        (match self {
-            Operand::Register8(_) => "r",
-            Operand::RegisterPtr8(_) => "$r",
-            Operand::Register16(_) => "dd",
-            Operand::RegisterPtr16(_) => "$dd",
-            Operand::PushPopRegister16(_) => "qq",
-            Operand::Imm8(_) => "n",
-            Operand::Imm16(_) => "nn",
-            Operand::SignedImm4(_) => "e",
-            Operand::Ptr8(_) => "$n",
-            Operand::Ptr16(_) => "$nn",
-        })
-        .to_string()
-    }
-}
-
-impl fmt::Display for Operand {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Operand::Register8(_) => write!(f, "r"),
-            Operand::RegisterPtr8(_) => write!(f, "$r"),
-            Operand::Register16(_) => write!(f, "dd"),
-            Operand::RegisterPtr16(_) => write!(f, "$dd"),
-            Operand::PushPopRegister16(_) => write!(f, "qq"),
-            Operand::Imm8(_) => write!(f, "n"),
-            Operand::Imm16(_) => write!(f, "nn"),
-            Operand::SignedImm4(_) => write!(f, "e"),
-            Operand::Ptr8(_) => write!(f, "$n"),
-            Operand::Ptr16(_) => write!(f, "$nn"),
-        }
-    }
-}
-
-// pub enum InstructionEncoding {
-//     Fixed {
-//         base: u8,
-//     },
-//     RegReg {
-//         base: u8,
-//         dst_shift: u8,
-//         src_shift: u8,
-//     },
-//     RegImm8 {
-//         base: u8,
-//         dst_shift: u8,
-//     },
-//     Imm8 {
-//         base: u8,
-//     },
-//     Reg16Imm16 {
-//         base: u8,
-//         dst_shift: u8,
-//     },
-//     SignedImm8 {
-//         base: u8,
-//     },
-//     Imm16 {
-//         base: u8,
-//     },
-//     Reg {
-//         base: u8,
-//         reg_shift: u8,
-//     },
-//     Reg16 {
-//         base: u8,
-//         reg_shift: u8,
-//     },
-// }
-
-/// Encode each of the above formats an instruction can take
-/// Emit byte(s), plural if there are immediate operands for
-/// example.
-/// Will probably need to look at the above and ensure there
-/// are no accidental duplicat
-///
-/// Find a simpler way of describing this via an opcode
-impl InstructionEncoding {
-    fn encode(&self, operands: &[Operand]) -> Option<Vec<u8>> {
-        match self {
-            InstructionEncoding::Fixed { base } => Some(vec![*base]),
-            InstructionEncoding::RegReg {
-                base,
-                dst_shift,
-                src_shift,
-            } => {
-                if let (Operand::Register8(r1), Operand::Register8(r2)) =
-                    (operands[0].clone(), operands[1].clone())
-                {
-                    Some(vec![
-                        base | r1.encode() << dst_shift | r2.encode() << src_shift,
-                    ])
-                } else {
-                    None
-                }
-            }
-            InstructionEncoding::RegImm8 { base, dst_shift } => {
-                if let (Operand::Register8(r1), Operand::Imm8(n)) =
-                    (operands[0].clone(), operands[1].clone())
-                {
-                    Some(vec![base | r1.encode() << dst_shift, n])
-                } else {
-                    None
-                }
-            }
-            InstructionEncoding::Imm8 { base } => {
-                if let Operand::Imm8(n) = operands[0] {
-                    Some(vec![*base, n])
-                } else {
-                    None
-                }
-            }
-            InstructionEncoding::Reg16Imm16 { base, dst_shift } => {
-                if let (Operand::Register16(r1), Operand::Imm16(n)) =
-                    (operands[0].clone(), operands[1].clone())
-                {
-                    Some(vec![
-                        base | (r1.encode() << dst_shift),
-                        n as u8,
-                        (n >> 8) as u8,
-                    ])
-                } else {
-                    None
-                }
-            }
-            InstructionEncoding::SignedImm8 { base } => todo!(),
-            InstructionEncoding::Imm16 { base } => {
-                if let Operand::Imm16(n) = operands[0] {
-                    Some(vec![*base, n as u8, (n >> 8) as u8])
-                } else {
-                    None
-                }
-            }
-            InstructionEncoding::Reg { base, reg_shift } => {
-                if let Operand::Register8(r) = operands[0] {
-                    Some(vec![base | r.encode() << reg_shift])
-                } else {
-                    None
-                }
-            }
-            InstructionEncoding::Reg16 { base, reg_shift } => {
-                if let Operand::Register16(r) = operands[0] {
-                    Some(vec![base | r.encode() << reg_shift])
-                } else {
-                    None
-                }
-            }
-        }
-    }
-}
+static OPCODES: &[InstructionDesc] = &[
+    InstructionDesc {
+        opcode: Opcode::LoadRdRr,
+        base: 0b01000000,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Register8,
+            shift: 2,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Register8,
+            shift: 5,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadRdImm8,
+        base: 0b00000110,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Register8,
+            shift: 2,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Imm8,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadRdHLRegPtr,
+        base: 0b01000110,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Register8,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::HLRegisterPtr,
+            shift: 5,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadHLRegPtrRr,
+        base: 0b01110000,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::HLRegisterPtr,
+            shift: 2,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Register8,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadHLRegPtrImm8,
+        base: 0b01110000,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Imm8,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::HLRegisterPtr,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadARegPtr16,
+        base: 0b00001010,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::RegisterPtr16,
+            shift: 5,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadRegPtr16AReg,
+        base: 0b00000010,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::RegisterPtr16,
+            shift: 5,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadRdRegPtr8,
+        base: 0b11110010,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::CRegisterPtr,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadRegPtr8Rr,
+        base: 0b11100010,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::CRegisterPtr,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadRdImmPtr8,
+        base: 0b11110000,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Ptr8,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadImmPtr8Rr,
+        base: 0b11100000,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Ptr8,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadRdImmPtr16,
+        base: 0b11111010,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Ptr16,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadImmPtr16Rr,
+        base: 0b11101010,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::Ptr16,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadIncRdRegPtr16,
+        base: 0b00101010,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::HLRegisterPtr,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadDecRdRegPtr16,
+        base: 0b00111010,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::HLRegisterPtr,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadIncRegPtr16Rr,
+        base: 0b00100010,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::HLRegisterPtr,
+            shift: 0,
+        }),
+    },
+    InstructionDesc {
+        opcode: Opcode::LoadDecRegPtr16Rr,
+        base: 0b00110010,
+        input_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::ARegister,
+            shift: 0,
+        }),
+        output_desc: Some(OperandDesc {
+            operand_type: OperandDiscriminants::HLRegisterPtr,
+            shift: 0,
+        }),
+    },
+];
 
 /* Instructions */
 pub struct OpcodeEncDesc {
@@ -372,7 +400,7 @@ pub struct Instruction {
 /// What really needs to happen here is some concept of register
 /// classes, which thankfully, have already been defined for the
 /// most part.
-static OPCODES: &[OpcodeEncDesc] = &[
+static OPCODES_OLD: &[OpcodeEncDesc] = &[
     OpcodeEncDesc {
         mnemonic: "nop",
         opcode: Opcode::Nop,
@@ -513,10 +541,10 @@ static OPCODES: &[OpcodeEncDesc] = &[
 ];
 
 lazy_static::lazy_static! {
-static ref OPCODEMAP: HashMap<&'static str, &'static OpcodeEncDesc> = {
+static ref OPCODEMAP_OLD: HashMap<&'static str, &'static OpcodeEncDesc> = {
     let mut map: HashMap<&'static str, &'static OpcodeEncDesc> = HashMap::new();
 
-    for op in OPCODES {
+    for op in OPCODES_OLD {
         map.entry(op.mnemonic)
         .or_insert_with(|| op);
     }
@@ -525,7 +553,7 @@ static ref OPCODEMAP: HashMap<&'static str, &'static OpcodeEncDesc> = {
 }
 
 pub fn find_instruction(mnemonic: &String, operands: &Vec<Operand>) -> Result<Vec<u8>, String> {
-    if let Some(&desc) = OPCODEMAP.get(mnemonic.as_str()) {
+    if let Some(&desc) = OPCODEMAP_OLD.get(mnemonic.as_str()) {
         if let Some(enc) = desc.encoding.encode(&operands) {
             return Ok(enc);
         } else {

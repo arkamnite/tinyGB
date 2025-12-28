@@ -6,6 +6,7 @@ use crate::gb::instruction::{
 use crate::gb::register::{Register, Register8, RegisterPtr8};
 use crate::lexer::Token;
 use logos::Span;
+use strum_macros::IntoStaticStr;
 
 type ParserError = (String, Span);
 type Result<T> = std::result::Result<T, ParserError>;
@@ -13,11 +14,18 @@ type Result<T> = std::result::Result<T, ParserError>;
 /// General opcode variants which have a 1:1 relationship
 /// with all the different identifier tokens that can be
 /// used to represent instructions.
+
+#[derive(IntoStaticStr)]
 pub enum GeneralOpcode {
+    #[strum(serialize = "nop")]
     Nop,
+    #[strum(serialize = "stop")]
     Stop,
+    #[strum(serialize = "ld")]
     Load,
+    #[strum(serialize = "ldi")]
     LoadIncrement,
+    #[strum(serialize = "ldd")]
     LoadDecrement,
 }
 
@@ -74,7 +82,7 @@ fn parse_identifier(identifier_token: &str, lexer: &mut logos::Lexer<'_, Token>)
     Err(("Unexpected identifier found here".to_owned(), span))
 }
 
-fn parse_instruction(opcode: Opcode, lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
+fn parse_instruction(opcode: GeneralOpcode, lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
     let mut parsed_operands: Vec<Operand> = Vec::new();
     let span = lexer.span();
     let mut parsed_mnemonic: String = opcode.to_string();
@@ -121,6 +129,10 @@ fn parse_instruction(opcode: Opcode, lexer: &mut logos::Lexer<'_, Token>) -> Res
             }
             Ok(Token::IntegerPointer(ip)) => {
                 // Check if wider than u8, demote if not.
+
+                // specific range + reg combo should
+                // be matched to Opcode::LoadImmPtr8Rr
+                // etc.
             }
             Ok(Token::Comma) => {
                 parsed_mnemonic.push_str(", ");

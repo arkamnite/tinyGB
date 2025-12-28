@@ -19,24 +19,47 @@ pub enum Register {
 }
 
 #[derive(Debug, PartialEq, Clone, Eq, Copy)]
-pub enum RegisterA {
+pub enum ARegister {
     A,
 }
 
-impl Encodable for RegisterA {
+#[derive(Debug, PartialEq, Clone, Eq, Copy)]
+pub enum CRegisterPtr {
+    C,
+}
+
+impl Encodable for ARegister {
     fn encode(&self) -> u8 {
         match self {
-            RegisterA::A => todo!(),
+            ARegister::A => todo!(),
         }
     }
 }
 
-impl TryFrom<Register> for RegisterA {
+impl Encodable for CRegisterPtr {
+    fn encode(&self) -> u8 {
+        match self {
+            CRegisterPtr::C => todo!(),
+        }
+    }
+}
+
+impl TryFrom<Register> for ARegister {
     type Error = TryFromRegisterError;
     fn try_from(value: Register) -> Result<Self, Self::Error> {
         match value {
-            Register::A => Ok(RegisterA::A),
+            Register::A => Ok(ARegister::A),
             _ => Err(("Register other than 'A' provided!", value)),
+        }
+    }
+}
+
+impl TryFrom<Register> for CRegisterPtr {
+    type Error = TryFromRegisterError;
+    fn try_from(value: Register) -> Result<Self, Self::Error> {
+        match value {
+            Register::C => Ok(CRegisterPtr::C),
+            _ => Err(("Register other than 'C' provided!", value)),
         }
     }
 }
@@ -144,12 +167,23 @@ impl TryFrom<Register> for Register16 {
     }
 }
 
-/// TODO: Notably absent here is the HLI and HLD
-/// operands; these must be supported later.
 #[derive(Debug, PartialEq, Clone, Eq, Copy)]
 pub enum RegisterPtr16 {
     Bc,
     De,
+}
+
+impl Encodable for RegisterPtr16 {
+    fn encode(&self) -> u8 {
+        match self {
+            RegisterPtr16::Bc => 0b00,
+            RegisterPtr16::De => 0b01,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Eq, Copy)]
+pub enum HLRegisterPtr {
     Hl,
 }
 
