@@ -1,14 +1,25 @@
 use std::collections::HashMap;
 
 use crate::gb::instruction::{
-    find_instruction, match_opcode, Instruction, Opcode, OpcodeDesc, Operand,
+    find_instruction, match_opcode, Instruction, Opcode, OpcodeEncDesc, Operand,
 };
-use crate::gb::register::{Register, Register8};
+use crate::gb::register::{Register, Register8, RegisterPtr8};
 use crate::lexer::Token;
 use logos::Span;
 
 type ParserError = (String, Span);
 type Result<T> = std::result::Result<T, ParserError>;
+
+/// General opcode variants which have a 1:1 relationship
+/// with all the different identifier tokens that can be
+/// used to represent instructions.
+pub enum GeneralOpcode {
+    Nop,
+    Stop,
+    Load,
+    LoadIncrement,
+    LoadDecrement,
+}
 
 pub enum Value {
     Instruction(Vec<u8>),
@@ -74,10 +85,15 @@ fn parse_instruction(opcode: Opcode, lexer: &mut logos::Lexer<'_, Token>) -> Res
                 // Arrived at a new instruction, prepare to return something.
 
                 // Check the table?
-                if let Some(instr_vec) =
-                    find_instruction(parsed_mnemonic.to_string(), &parsed_operands).ok()
-                {
+                println!("Parsed mnemonic: {}", parsed_mnemonic);
+                if let Some(instr_vec) = find_instruction(&parsed_mnemonic, &parsed_operands).ok() {
                     return Ok(Value::Instruction(instr_vec));
+                } else {
+                    return Err((
+                        format!("unable to match instruction: {}", parsed_mnemonic.as_str())
+                            .to_owned(),
+                        span,
+                    ));
                 }
             }
             Ok(Token::Identifier) => {
@@ -92,7 +108,12 @@ fn parse_instruction(opcode: Opcode, lexer: &mut logos::Lexer<'_, Token>) -> Res
                 parsed_mnemonic.push_str(operand.gen_placeholder().as_str());
                 parsed_operands.push(operand);
             }
-            Ok(Token::RegisterPtr(rp)) => {}
+            Ok(Token::RegisterPtr(rp)) => {
+                let operand = Operand::RegisterPtr8(RegisterPtr8::try_from(rp).unwrap());
+                parsed_mnemonic.push_str(" ");
+                parsed_mnemonic.push_str(operand.gen_placeholder().as_str());
+                parsed_operands.push(operand);
+            }
             Ok(Token::Integer(i)) => {
                 // Check if this is wider than u8, demote if not.
                 // Also check for signed range based on previous
