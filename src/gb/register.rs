@@ -1,5 +1,7 @@
 use crate::gb::asm::{Encodable, PrintAsm};
 
+type TryFromRegisterError = (&'static str, Register);
+
 #[derive(Debug, PartialEq, Clone, Eq, Copy)]
 pub enum Register {
     A,
@@ -16,6 +18,31 @@ pub enum Register {
     SP,
 }
 
+#[derive(Debug, PartialEq, Clone, Eq, Copy)]
+pub enum RegisterA {
+    A,
+}
+
+impl Encodable for RegisterA {
+    fn encode(&self) -> u8 {
+        match self {
+            RegisterA::A => todo!(),
+        }
+    }
+}
+
+impl TryFrom<Register> for RegisterA {
+    type Error = TryFromRegisterError;
+    fn try_from(value: Register) -> Result<Self, Self::Error> {
+        match value {
+            Register::A => Ok(RegisterA::A),
+            _ => Err(("Register other than 'A' provided!", value)),
+        }
+    }
+}
+
+// Might want to replace the Encodable trait impl
+// for strum property (int)?
 #[derive(Debug, PartialEq, Clone, Eq, Copy)]
 pub enum Register8 {
     A,
@@ -42,7 +69,7 @@ impl Encodable for Register8 {
 }
 
 impl TryFrom<Register> for Register8 {
-    type Error = (&'static str, Register);
+    type Error = TryFromRegisterError;
     fn try_from(value: Register) -> Result<Self, Self::Error> {
         match value {
             Register::A => Ok(Register8::A),
@@ -61,6 +88,17 @@ impl TryFrom<Register> for Register8 {
 pub enum RegisterPtr8 {
     A,
     C,
+}
+
+impl TryFrom<Register> for RegisterPtr8 {
+    type Error = TryFromRegisterError;
+    fn try_from(value: Register) -> Result<Self, Self::Error> {
+        match value {
+            Register::A => Ok(RegisterPtr8::A),
+            Register::C => Ok(RegisterPtr8::C),
+            _ => Err(("Invalid 8-bit register pointer provided!", value)),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Eq, Copy)]
@@ -91,6 +129,18 @@ impl PrintAsm for Register16 {
             Register16::Sp => "sp",
         })
         .to_string()
+    }
+}
+
+impl TryFrom<Register> for Register16 {
+    type Error = TryFromRegisterError;
+    fn try_from(value: Register) -> Result<Self, Self::Error> {
+        match value {
+            Register::BC => Ok(Register16::Bc),
+            Register::DE => Ok(Register16::De),
+            Register::HL => Ok(Register16::Hl),
+            _ => Err(("Invalid 16-bit register provided!", value)),
+        }
     }
 }
 

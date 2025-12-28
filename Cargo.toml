@@ -8,3 +8,5 @@ version = "0.1.0"
 [dependencies]
 lazy_static = "1.5.0"
 logos = "0.15.1"
+strum = "0.27"
+strum_macros = "0.27"

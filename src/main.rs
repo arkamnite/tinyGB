@@ -17,9 +17,9 @@ fn main() {
     //     ld %a, #5
     // ";
     let input = "
-        ld %a, $bc
-        ld %a, #5
-    ";
+        ld %a, $c
+        ";
+    // ld %a, #5
 
     println!("==================== Lexer =====================");
     // let _tokens = lexer::tokenize(input);
