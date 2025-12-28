@@ -2,17 +2,20 @@
 
 use std::{collections::HashMap, fmt, u8};
 
-use strum_macros::EnumDiscriminants;
+use strum_macros::{EnumDiscriminants, IntoStaticStr};
 
-use crate::gb::{
-    asm::Encodable,
-    register::{
-        ARegister, CRegisterPtr, HLRegisterPtr, PushPopRegister16, Register16, Register8,
-        RegisterPtr16, RegisterPtr8,
+use crate::{
+    gb::{
+        asm::Encodable,
+        register::{
+            ARegister, CRegisterPtr, HLRegisterPtr, PushPopRegister16, Register16, Register8,
+            RegisterPtr16, RegisterPtr8,
+        },
     },
+    parser::{GeneralOpcode, ParserError},
 };
 
-#[derive(Debug, Clone, EnumDiscriminants)]
+#[derive(Debug, Clone, EnumDiscriminants, Eq, PartialEq)]
 pub enum Operand {
     ARegister(ARegister),
     CRegisterPtr(CRegisterPtr),
@@ -29,16 +32,51 @@ pub enum Operand {
     SignedImm4(u8),
 }
 
+#[derive(Clone)]
 pub struct OperandDesc {
-    operand_type: OperandDiscriminants,
+    pub operand_type: OperandDiscriminants,
     shift: u8,
 }
 
+#[derive(Clone)]
+/// A more forward-compatible definition would
+/// be to use an array of OperandDesc, and then
+/// specify indices for these in the table to help
+/// identify input and output operands. This will
+/// allow for ISAs which have multiple (input)
+/// operands for instructions.
 pub struct InstructionDesc {
     opcode: Opcode,
+    generic_opcode: GeneralOpcode,
     base: u8,
     input_desc: Option<OperandDesc>,
     output_desc: Option<OperandDesc>,
+}
+
+impl InstructionDesc {
+    pub fn encode(&self) -> Result<Vec<u8>, ParserError> {
+        match self.opcode {
+            Opcode::Nop => todo!(),
+            Opcode::Stop => todo!(),
+            Opcode::LoadRdRr => todo!(),
+            Opcode::LoadRdImm8 => todo!(),
+            Opcode::LoadRdHLRegPtr => todo!(),
+            Opcode::LoadHLRegPtrRr => todo!(),
+            Opcode::LoadHLRegPtrImm8 => todo!(),
+            Opcode::LoadARegPtr16 => todo!(),
+            Opcode::LoadRegPtr16AReg => todo!(),
+            Opcode::LoadRdRegPtr8 => todo!(),
+            Opcode::LoadRegPtr8Rr => todo!(),
+            Opcode::LoadRdImmPtr8 => todo!(),
+            Opcode::LoadImmPtr8Rr => todo!(),
+            Opcode::LoadRdImmPtr16 => todo!(),
+            Opcode::LoadImmPtr16Rr => todo!(),
+            Opcode::LoadIncRdRegPtr16 => todo!(),
+            Opcode::LoadDecRdRegPtr16 => todo!(),
+            Opcode::LoadIncRegPtr16Rr => todo!(),
+            Opcode::LoadDecRegPtr16Rr => todo!(),
+        }
+    }
 }
 
 // how are we going to group the instructions
@@ -79,7 +117,7 @@ pub struct InstructionDesc {
 // note for later: might be a good idea to use a builder of sorts
 // for the byte(s). This could help simplify the legalisation logic?
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, IntoStaticStr, Eq, Hash, PartialEq)]
 pub enum Opcode {
     Nop,
     Stop,
@@ -132,6 +170,7 @@ pub enum Opcode {
 
 static OPCODES: &[InstructionDesc] = &[
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdRr,
         base: 0b01000000,
         input_desc: Some(OperandDesc {
@@ -144,6 +183,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdImm8,
         base: 0b00000110,
         input_desc: Some(OperandDesc {
@@ -156,6 +196,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdHLRegPtr,
         base: 0b01000110,
         input_desc: Some(OperandDesc {
@@ -168,6 +209,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadHLRegPtrRr,
         base: 0b01110000,
         input_desc: Some(OperandDesc {
@@ -180,6 +222,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadHLRegPtrImm8,
         base: 0b01110000,
         input_desc: Some(OperandDesc {
@@ -192,6 +235,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadARegPtr16,
         base: 0b00001010,
         input_desc: Some(OperandDesc {
@@ -204,6 +248,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRegPtr16AReg,
         base: 0b00000010,
         input_desc: Some(OperandDesc {
@@ -216,6 +261,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdRegPtr8,
         base: 0b11110010,
         input_desc: Some(OperandDesc {
@@ -228,6 +274,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRegPtr8Rr,
         base: 0b11100010,
         input_desc: Some(OperandDesc {
@@ -240,6 +287,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdImmPtr8,
         base: 0b11110000,
         input_desc: Some(OperandDesc {
@@ -252,6 +300,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadImmPtr8Rr,
         base: 0b11100000,
         input_desc: Some(OperandDesc {
@@ -264,6 +313,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdImmPtr16,
         base: 0b11111010,
         input_desc: Some(OperandDesc {
@@ -276,6 +326,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadImmPtr16Rr,
         base: 0b11101010,
         input_desc: Some(OperandDesc {
@@ -288,6 +339,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadIncRdRegPtr16,
         base: 0b00101010,
         input_desc: Some(OperandDesc {
@@ -300,6 +352,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadDecRdRegPtr16,
         base: 0b00111010,
         input_desc: Some(OperandDesc {
@@ -312,6 +365,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadIncRegPtr16Rr,
         base: 0b00100010,
         input_desc: Some(OperandDesc {
@@ -324,6 +378,7 @@ static OPCODES: &[InstructionDesc] = &[
         }),
     },
     InstructionDesc {
+        generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadDecRegPtr16Rr,
         base: 0b00110010,
         input_desc: Some(OperandDesc {
@@ -337,233 +392,69 @@ static OPCODES: &[InstructionDesc] = &[
     },
 ];
 
-/* Instructions */
-pub struct OpcodeEncDesc {
-    /// Can we make this automatically generated when
-    /// building the map based on the register/operand
-    /// class, utilising PrintAsm trait?
-    mnemonic: &'static str,
-    /// This should eventually generate the "base" value
-    /// for the instruction that the operands are then
-    /// OR'd into.
-    opcode: Opcode,
-    encoding: InstructionEncoding,
-}
-
-#[derive(Debug)]
-pub struct Instruction {
-    opcode: Opcode,
-    operands: Vec<Operand>,
-    encoding: u8,
-    /// Currently unused, but will later
-    /// be used to decide which region
-    /// to place this
-    region: u16,
-}
-
-/// This should really be a table that can
-/// be looked-up in constant time... perhaps
-/// by instantiating every single variant at
-/// build time? That way, the key then becomes
-/// the final instruction encoding. The challenge
-/// will be in figuring out how to (auto)generate
-/// the final table at build time, without it
-/// being too cumbersome to write/specify.
-///
-/// Maybe that is something more relevant for
-/// disassembly than it is assembling. For now,
-/// the focus just needs to be on determining the
-/// correct key.
-///
-/// Furthermore, should the fixed-encoding instructions
-/// have their 'mnemonic' updated to reflect the lack of
-/// flexibility in operands? How else are you meant to locate
-/// the encoding?
-///
-/// - see below for the answer to this question a.k.a. the
-///   issue with inflexible mnemonics for the fixed-encoding
-///   instructions.
-///
-/// Current problem: inconsistent 'mnemonic' scheme.
-/// E.g. take 'ld %a, $c'; this is ambiguous with 'ld r, $r' which
-/// is actually used for lookup. If this 'ld r, $r' instruction
-/// actually exists, there should be a specific opcode (rather than)
-/// just `Opcode::Load`, and this should then be used to enforce the
-/// classes of operand it accepts. It should be possible to check during
-/// parsing whether an incorrect operand has been parsed based on the
-/// opcode.
-///
-/// To solve the above example, there would therefore be two new opcodes
-/// created- `Opcode::LoadRdPtr` and `Opcode::LoadPtrRr`- and each opcode
-/// must specify a valid type for 'ins' and 'outs'.
-///
-/// What really needs to happen here is some concept of register
-/// classes, which thankfully, have already been defined for the
-/// most part.
-static OPCODES_OLD: &[OpcodeEncDesc] = &[
-    OpcodeEncDesc {
-        mnemonic: "nop",
-        opcode: Opcode::Nop,
-        encoding: InstructionEncoding::Fixed { base: 0x0 },
-    },
-    OpcodeEncDesc {
-        mnemonic: "stop",
-        opcode: Opcode::Stop,
-        encoding: InstructionEncoding::Fixed { base: 0x1 },
-    },
-    // LD r, r'
-    OpcodeEncDesc {
-        mnemonic: "ld r, r",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::RegReg {
-            base: 0b01000000,
-            dst_shift: 5,
-            src_shift: 2,
-        },
-    },
-    // LD r, n
-    OpcodeEncDesc {
-        mnemonic: "ld r, n",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::RegImm8 {
-            base: 0b00000110,
-            dst_shift: 5,
-        },
-    },
-    // LD r, (HL)
-    OpcodeEncDesc {
-        mnemonic: "ld r, $hl",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Reg {
-            base: 0b01000110,
-            reg_shift: 5,
-        },
-    },
-    // LD (HL), r
-    OpcodeEncDesc {
-        mnemonic: "ld $hl, r",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Reg {
-            base: 0b01110000,
-            reg_shift: 2,
-        },
-    },
-    // LD (HL), n
-    OpcodeEncDesc {
-        mnemonic: "ld $hl, n",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Imm8 { base: 0b00110110 },
-    },
-    // LD A, (BC)
-    OpcodeEncDesc {
-        mnemonic: "ld %a, $bc",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Fixed { base: 0b00001010 },
-    },
-    // LD A, (DE)
-    OpcodeEncDesc {
-        mnemonic: "ld %a, $de",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Fixed { base: 0b00011010 },
-    },
-    // LD A, (C)
-    OpcodeEncDesc {
-        mnemonic: "ld %a, $c",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Fixed { base: 0b11110010 },
-    },
-    // LD (C), A
-    OpcodeEncDesc {
-        mnemonic: "ld $c, %a",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Fixed { base: 0b11100010 },
-    },
-    // LD A, (n)
-    OpcodeEncDesc {
-        mnemonic: "ld %a, $n",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Imm8 { base: 0b11110000 },
-    },
-    // LD (n), A
-    OpcodeEncDesc {
-        mnemonic: "ld $n, %a",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Imm8 { base: 0b11100000 },
-    },
-    // LD A, (nn)
-    OpcodeEncDesc {
-        mnemonic: "ld %a, $nn",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Imm16 { base: 0b11111010 },
-    },
-    // LD (nn), A
-    OpcodeEncDesc {
-        mnemonic: "ld $nn, %a",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Imm16 { base: 0b11101010 },
-    },
-    // LD A, (HL+)
-    OpcodeEncDesc {
-        mnemonic: "ldi %a, $hl",
-        opcode: Opcode::LoadIncrement,
-        encoding: InstructionEncoding::Fixed { base: 0b11101010 },
-    },
-    // LD A, (HL-)
-    OpcodeEncDesc {
-        mnemonic: "ldd %a, $hl",
-        opcode: Opcode::LoadDecrement,
-        encoding: InstructionEncoding::Fixed { base: 0b00111010 },
-    },
-    // LD (BC), A
-    OpcodeEncDesc {
-        mnemonic: "ld $bc, %a",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Fixed { base: 0b00000010 },
-    },
-    // LD (DE), A
-    OpcodeEncDesc {
-        mnemonic: "ld $de, %a",
-        opcode: Opcode::Load,
-        encoding: InstructionEncoding::Fixed { base: 0b00010010 },
-    },
-    // LD (HL+), A
-    OpcodeEncDesc {
-        mnemonic: "ldi $hl, %a",
-        opcode: Opcode::LoadIncrement,
-        encoding: InstructionEncoding::Fixed { base: 0b00100010 },
-    },
-    // LD (HL-), A
-    OpcodeEncDesc {
-        mnemonic: "ldd $hl, %a",
-        opcode: Opcode::LoadDecrement,
-        encoding: InstructionEncoding::Fixed { base: 0b00110010 },
-    },
-];
-
 lazy_static::lazy_static! {
-static ref OPCODEMAP_OLD: HashMap<&'static str, &'static OpcodeEncDesc> = {
-    let mut map: HashMap<&'static str, &'static OpcodeEncDesc> = HashMap::new();
+static ref OPCODEMAP: HashMap<Opcode, &'static InstructionDesc> = {
+  let mut map: HashMap<Opcode, &'static InstructionDesc> = HashMap::new();
 
-    for op in OPCODES_OLD {
-        map.entry(op.mnemonic)
-        .or_insert_with(|| op);
-    }
-    map
+  for op in OPCODES {
+    map.entry(op.opcode)
+    .or_insert_with(|| op);
+  }
+
+  map
 };
 }
 
-pub fn find_instruction(mnemonic: &String, operands: &Vec<Operand>) -> Result<Vec<u8>, String> {
-    if let Some(&desc) = OPCODEMAP_OLD.get(mnemonic.as_str()) {
-        if let Some(enc) = desc.encoding.encode(&operands) {
-            return Ok(enc);
-        } else {
-            return Err(format!(
-                "Invalid operands provided for instruction with opcode {:?}",
-                desc.opcode,
-            )
-            .to_owned());
+fn match_description(
+    instruction: Option<InstructionDesc>,
+    input_operand: Option<OperandDiscriminants>,
+    output_operand: Option<OperandDiscriminants>,
+) -> bool {
+    let match_input = match (instruction.clone(), input_operand) {
+        (None, None) => false,
+        (Some(ins_desc), Some(op_desc)) => {
+            if let Some(equals) = ins_desc
+                .input_desc
+                .and_then(|f| Some(f.operand_type == op_desc))
+            {
+                equals
+            } else {
+                false
+            }
         }
-    } else {
-        return Err(format!("Could not find instruction for: {}", mnemonic).to_owned());
+        (_, _) => false,
+    };
+
+    let match_output = match (instruction, input_operand) {
+        (None, None) => false,
+        (Some(ins_desc), Some(op_desc)) => {
+            if let Some(equals) = ins_desc
+                .input_desc
+                .and_then(|f| Some(f.operand_type == op_desc))
+            {
+                equals
+            } else {
+                false
+            }
+        }
+        (_, _) => false,
+    };
+
+    match_input && match_output
+}
+
+pub fn find_instruction(
+    general_op: GeneralOpcode,
+    input: Option<OperandDiscriminants>,
+    output: Option<OperandDiscriminants>,
+) -> Option<&'static InstructionDesc> {
+    // Get all the keys which match the operand discr. and the general opcode.
+    let result = OPCODEMAP.iter().find(|(_, &value)| {
+        match_description(Some(value.clone()), input, output) && value.generic_opcode == general_op
+    });
+
+    match result {
+        Some((_, desc)) => Some(&desc),
+        None => None,
     }
 }

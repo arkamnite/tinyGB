@@ -1,21 +1,19 @@
 use std::collections::HashMap;
 
-use crate::gb::instruction::{
-    find_instruction, match_opcode, Instruction, Opcode, OpcodeEncDesc, Operand,
-};
+use crate::gb::instruction::{find_instruction, Opcode, Operand, OperandDiscriminants};
 use crate::gb::register::{Register, Register8, RegisterPtr8};
 use crate::lexer::Token;
 use logos::Span;
-use strum_macros::IntoStaticStr;
+use strum_macros::{AsRefStr, IntoStaticStr};
 
-type ParserError = (String, Span);
+pub type ParserError = (String, Span);
 type Result<T> = std::result::Result<T, ParserError>;
 
 /// General opcode variants which have a 1:1 relationship
 /// with all the different identifier tokens that can be
 /// used to represent instructions.
 
-#[derive(IntoStaticStr)]
+#[derive(IntoStaticStr, AsRefStr, Clone, Eq, PartialEq)]
 pub enum GeneralOpcode {
     #[strum(serialize = "nop")]
     Nop,
@@ -31,6 +29,17 @@ pub enum GeneralOpcode {
 
 pub enum Value {
     Instruction(Vec<u8>),
+}
+
+fn match_general_opcode(token: &str) -> Option<GeneralOpcode> {
+    match token {
+        val if val == GeneralOpcode::Nop.as_ref() => Some(GeneralOpcode::Nop),
+        val if val == GeneralOpcode::Stop.as_ref() => Some(GeneralOpcode::Stop),
+        val if val == GeneralOpcode::Load.as_ref() => Some(GeneralOpcode::Load),
+        val if val == GeneralOpcode::LoadIncrement.as_ref() => Some(GeneralOpcode::LoadIncrement),
+        val if val == GeneralOpcode::LoadDecrement.as_ref() => Some(GeneralOpcode::LoadDecrement),
+        _ => None,
+    }
 }
 
 pub fn parse(lexer: &mut logos::Lexer<'_, Token>) -> Result<Vec<Value>> {
@@ -68,7 +77,7 @@ fn parse_identifier(identifier_token: &str, lexer: &mut logos::Lexer<'_, Token>)
     let span = lexer.span();
 
     // match the current token
-    if let Some(opcode) = match_opcode(identifier_token.to_string()) {
+    if let Some(opcode) = match_general_opcode(identifier_token) {
         return parse_instruction(opcode, lexer);
     }
 
@@ -83,44 +92,41 @@ fn parse_identifier(identifier_token: &str, lexer: &mut logos::Lexer<'_, Token>)
 }
 
 fn parse_instruction(opcode: GeneralOpcode, lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
-    let mut parsed_operands: Vec<Operand> = Vec::new();
+    let mut parsed_input_operand: Option<Operand> = None;
+    let mut parsed_output_operand: Option<Operand> = None;
     let span = lexer.span();
-    let mut parsed_mnemonic: String = opcode.to_string();
 
     while let Some(token) = lexer.next() {
         match token {
             Ok(Token::Newline) => {
-                // Arrived at a new instruction, prepare to return something.
-
-                // Check the table?
-                println!("Parsed mnemonic: {}", parsed_mnemonic);
-                if let Some(instr_vec) = find_instruction(&parsed_mnemonic, &parsed_operands).ok() {
-                    return Ok(Value::Instruction(instr_vec));
+                if let Some(instr_vec) = find_instruction(
+                    opcode.clone(),
+                    parsed_input_operand.map_or(None, |opt| Some(OperandDiscriminants::from(opt))),
+                    parsed_output_operand.map_or(None, |opt| Some(OperandDiscriminants::from(opt))),
+                ) {
+                    // Encode the value now
+                    return Ok(Value::Instruction(instr_vec.encode()?));
                 } else {
                     return Err((
-                        format!("unable to match instruction: {}", parsed_mnemonic.as_str())
-                            .to_owned(),
+                        format!("unable to match instruction: {}", opcode.as_ref()).to_owned(),
                         span,
                     ));
                 }
             }
             Ok(Token::Identifier) => {
                 // Another instruction?
-                if let Some(_) = match_opcode(lexer.slice().to_string()) {
+                if let Some(_) = match_general_opcode(lexer.slice()) {
                     return Err(("unexpected instruction identifier in line".to_owned(), span));
                 }
             }
             Ok(Token::Register(r)) => {
-                let operand = Operand::Register8(Register8::try_from(r).unwrap());
-                parsed_mnemonic.push_str(" ");
-                parsed_mnemonic.push_str(operand.gen_placeholder().as_str());
-                parsed_operands.push(operand);
+                todo!()
             }
             Ok(Token::RegisterPtr(rp)) => {
+                // We need to rewrite the 'from' logic so that we can match to the correct register
+                // class.
                 let operand = Operand::RegisterPtr8(RegisterPtr8::try_from(rp).unwrap());
-                parsed_mnemonic.push_str(" ");
-                parsed_mnemonic.push_str(operand.gen_placeholder().as_str());
-                parsed_operands.push(operand);
+                todo!()
             }
             Ok(Token::Integer(i)) => {
                 // Check if this is wider than u8, demote if not.
@@ -134,9 +140,7 @@ fn parse_instruction(opcode: GeneralOpcode, lexer: &mut logos::Lexer<'_, Token>)
                 // be matched to Opcode::LoadImmPtr8Rr
                 // etc.
             }
-            Ok(Token::Comma) => {
-                parsed_mnemonic.push_str(", ");
-            }
+            Ok(Token::Comma) => {}
             Ok(_) => todo!(),
             _ => todo!(),
         }
