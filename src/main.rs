@@ -17,7 +17,7 @@ fn main() {
     //     ld %a, #5
     // ";
     let input = "
-        ld %a, $c
+        ld %a, %c
         ";
     // ld %a, #5
 

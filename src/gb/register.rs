@@ -1,6 +1,6 @@
 use crate::gb::asm::{Encodable, PrintAsm};
 
-type TryFromRegisterError = (&'static str, Register);
+pub type TryFromRegisterError = (&'static str, Register);
 
 #[derive(Debug, PartialEq, Clone, Eq, Copy)]
 pub enum Register {

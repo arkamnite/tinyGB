@@ -59,11 +59,17 @@ pub enum Token {
     #[regex(r"\w+")]
     Identifier,
 
-    #[regex(r"%[a-z][a-z]?", register_callback)]
+    #[regex(r"%[a-z]", register_callback)]
     Register(Register),
 
-    #[regex(r"\$[a-z][a-z]?", register_callback)]
+    #[regex(r"\$[a-z]", register_callback)]
     RegisterPtr(Register),
+
+    #[regex(r"%[a-z][a-z]", register_callback)]
+    Register16(Register),
+
+    #[regex(r"\$[a-z][a-z]", register_callback)]
+    RegisterPtr16(Register),
 
     // Need to include signed 8-bit numbers? Might need several enums for this.
     #[regex("#[0-9]+", |lex| lex.slice()[1..].parse::<u16>().unwrap())]

@@ -1,17 +1,15 @@
 /* Operand Description */
 
-use std::{collections::HashMap, fmt, u8};
+use std::{collections::HashMap, u8};
 
 use strum_macros::{EnumDiscriminants, IntoStaticStr};
 
 use crate::{
-    gb::{
-        asm::Encodable,
-        register::{
-            ARegister, CRegisterPtr, HLRegisterPtr, PushPopRegister16, Register16, Register8,
-            RegisterPtr16, RegisterPtr8,
-        },
+    gb::register::{
+        ARegister, CRegisterPtr, HLRegisterPtr, PushPopRegister16, Register16, Register8,
+        RegisterPtr16, RegisterPtr8,
     },
+    lexer::Token,
     parser::{GeneralOpcode, ParserError},
 };
 
@@ -30,6 +28,47 @@ pub enum Operand {
     Ptr8(u8),
     Ptr16(u16),
     SignedImm4(u8),
+}
+
+impl TryFrom<Token> for Operand {
+    type Error = (&'static str, Token);
+
+    fn try_from(value: Token) -> Result<Self, Self::Error> {
+        match value {
+            Token::StringLiteral => todo!(),
+            Token::Identifier => todo!(),
+            Token::Register(register) => match register {
+                crate::gb::register::Register::A => Ok(Operand::ARegister(ARegister::A)),
+                crate::gb::register::Register::B => Ok(Operand::Register8(Register8::B)),
+                crate::gb::register::Register::C => Ok(Operand::Register8(Register8::C)),
+                crate::gb::register::Register::D => Ok(Operand::Register8(Register8::D)),
+                crate::gb::register::Register::E => Ok(Operand::Register8(Register8::E)),
+                crate::gb::register::Register::H => Ok(Operand::Register8(Register8::H)),
+                crate::gb::register::Register::L => Ok(Operand::Register8(Register8::L)),
+                _ => Err(("Register pair provided!", value)),
+            },
+            Token::RegisterPtr(register) => match register {
+                crate::gb::register::Register::C => Ok(Operand::CRegisterPtr(CRegisterPtr::C)),
+                _ => Err(("Invalid 8-bit register used as pointer!", value)),
+            },
+            Token::Register16(register) => match register {
+                crate::gb::register::Register::BC => Ok(Operand::Register16(Register16::Bc)),
+                crate::gb::register::Register::DE => Ok(Operand::Register16(Register16::De)),
+                crate::gb::register::Register::HL => Ok(Operand::Register16(Register16::Hl)),
+                crate::gb::register::Register::PC => todo!(),
+                crate::gb::register::Register::SP => todo!(),
+                _ => Err(("Invalid 8-bit register used for register pair!", value)),
+            },
+            Token::RegisterPtr16(register) => match register {
+                crate::gb::register::Register::BC => Ok(Operand::RegisterPtr16(RegisterPtr16::Bc)),
+                crate::gb::register::Register::DE => Ok(Operand::RegisterPtr16(RegisterPtr16::De)),
+                _ => Err(("Only BC and DE register pairs can be used as general-purpose 16-bit register pointers", value))
+            },
+            Token::Integer(_) => todo!(),
+            Token::IntegerPointer(_) => todo!(),
+            _ => Err(("Token does not map to operand!", value)),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -54,7 +93,8 @@ pub struct InstructionDesc {
 }
 
 impl InstructionDesc {
-    pub fn encode(&self) -> Result<Vec<u8>, ParserError> {
+    pub fn encode(&self, operands: &[Operand]) -> Result<Vec<u8>, ParserError> {
+        let mut bytes: Vec<u8> = vec![];
         match self.opcode {
             Opcode::Nop => todo!(),
             Opcode::Stop => todo!(),

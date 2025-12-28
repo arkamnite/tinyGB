@@ -91,21 +91,37 @@ fn parse_identifier(identifier_token: &str, lexer: &mut logos::Lexer<'_, Token>)
     Err(("Unexpected identifier found here".to_owned(), span))
 }
 
+enum ExpectOperand {
+    Input,
+    Output,
+}
+
 fn parse_instruction(opcode: GeneralOpcode, lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
-    let mut parsed_input_operand: Option<Operand> = None;
-    let mut parsed_output_operand: Option<Operand> = None;
+    let mut parsed_operands: Vec<Operand> = vec![];
     let span = lexer.span();
 
     while let Some(token) = lexer.next() {
         match token {
             Ok(Token::Newline) => {
+                let mut parsed_input_operand: Option<Operand> = None;
+                let mut parsed_output_operand: Option<Operand> = None;
+
+                let operands_as_arr = parsed_operands.as_slice();
+
+                if parsed_operands.len() == 1 {
+                    parsed_input_operand = Some(operands_as_arr[0].clone());
+                } else if parsed_operands.len() == 2 {
+                    parsed_output_operand = Some(operands_as_arr[0].clone());
+                    parsed_input_operand = Some(operands_as_arr[1].clone());
+                }
+
                 if let Some(instr_vec) = find_instruction(
                     opcode.clone(),
                     parsed_input_operand.map_or(None, |opt| Some(OperandDiscriminants::from(opt))),
                     parsed_output_operand.map_or(None, |opt| Some(OperandDiscriminants::from(opt))),
                 ) {
                     // Encode the value now
-                    return Ok(Value::Instruction(instr_vec.encode()?));
+                    return Ok(Value::Instruction(instr_vec.encode(operands_as_arr)?));
                 } else {
                     return Err((
                         format!("unable to match instruction: {}", opcode.as_ref()).to_owned(),
@@ -120,12 +136,15 @@ fn parse_instruction(opcode: GeneralOpcode, lexer: &mut logos::Lexer<'_, Token>)
                 }
             }
             Ok(Token::Register(r)) => {
-                todo!()
+                let try_operand = Operand::try_from(Token::Register(r)).ok();
+                match try_operand {
+                    Some(op) => parsed_operands.push(op),
+                    None => {
+                        return Err((("Invalid operand provided!").to_string(), span));
+                    }
+                }
             }
             Ok(Token::RegisterPtr(rp)) => {
-                // We need to rewrite the 'from' logic so that we can match to the correct register
-                // class.
-                let operand = Operand::RegisterPtr8(RegisterPtr8::try_from(rp).unwrap());
                 todo!()
             }
             Ok(Token::Integer(i)) => {
@@ -147,49 +166,3 @@ fn parse_instruction(opcode: GeneralOpcode, lexer: &mut logos::Lexer<'_, Token>)
     }
     Err(("unexpected end of instruction".to_owned(), span))
 }
-
-// Assume we have already consumed the mnemonic for the instruction (instr_token)
-// Slight problem. Might need to do more of the parent skeleton to work out who will
-// call this function, and therefore when this function stops. In other words, this all
-// needs to be structured to use a peekable iterator in order to implement lookahead.
-// fn parse_instruction(instr_token: &str, lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
-//     let span = lexer.span();
-//     let mut parsed_operands: Vec<Operand> = Vec::new();
-//     let mut parsed_operand_types: Vec<OperandType> = Vec::new();
-
-//     // We now need to iterate through all future tokens until we get another 'instruction'.
-//     // Maybe use peekable?
-//     while let Some(token) = lexer.next() {
-//         match token {
-//             // For now, just support registers
-//             Ok(Token::Register(r)) => {
-//                 parsed_operands.push(Operand::Register(r.clone()));
-//                 // parsed_operand_types.push(OperandType::Register(r));
-//             }
-//             // We have arrived at another instruction.
-//             Ok(Token::Newline) => {
-//                 // We already know that there is a value for this based on who
-//                 // called parse_instruction so we can directly get the value for this key.
-//                 let options = &OPCODEMAP[instr_token];
-
-//                 // Check if it is valid based on the options we collected earlier
-//                 if let Some(matched_op_desc) =
-//                     match_operand_description(parsed_operand_types, options.to_vec())
-//                 {
-//                     let instruction: Instruction = Instruction {
-//                         opcode: matched_op_desc.opcode,
-//                         operands: parsed_operands,
-//                         encoding: matched_op_desc.encoding,
-//                     };
-//                     return Ok(Value::Instruction(instruction));
-//                 } else {
-//                     return Err((("Invalid operands for instruction").to_owned(), span));
-//                 }
-//             }
-//             // Other possible operands will be supported later.
-//             Ok(_) => todo!(),
-//             _ => todo!(),
-//         }
-//     }
-//     Err(("instruction parsing error".to_owned(), span))
-// }
