@@ -1,6 +1,6 @@
 /* Operand Description */
 
-use std::{collections::HashMap, u8};
+use std::{collections::HashMap, iter::zip, u8};
 
 use strum_macros::{EnumDiscriminants, IntoStaticStr};
 
@@ -71,7 +71,7 @@ impl TryFrom<Token> for Operand {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct OperandDesc {
     pub operand_type: OperandDiscriminants,
     shift: u8,
@@ -88,8 +88,7 @@ pub struct InstructionDesc {
     opcode: Opcode,
     generic_opcode: GeneralOpcode,
     base: u8,
-    input_desc: Option<OperandDesc>,
-    output_desc: Option<OperandDesc>,
+    operand_descriptions: &'static [OperandDesc],
 }
 
 impl InstructionDesc {
@@ -213,222 +212,256 @@ static OPCODES: &[InstructionDesc] = &[
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdRr,
         base: 0b01000000,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Register8,
-            shift: 2,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Register8,
-            shift: 5,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 5,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 2,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdImm8,
         base: 0b00000110,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Register8,
-            shift: 2,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Imm8,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 2,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Imm8,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdHLRegPtr,
         base: 0b01000110,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Register8,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::HLRegisterPtr,
-            shift: 5,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 5,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadHLRegPtrRr,
         base: 0b01110000,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::HLRegisterPtr,
-            shift: 2,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Register8,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 2,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadHLRegPtrImm8,
         base: 0b01110000,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Imm8,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::HLRegisterPtr,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Ptr8,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadARegPtr16,
         base: 0b00001010,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::RegisterPtr16,
-            shift: 5,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::RegisterPtr16,
+                shift: 5,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRegPtr16AReg,
         base: 0b00000010,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::RegisterPtr16,
-            shift: 5,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::RegisterPtr16,
+                shift: 5,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdRegPtr8,
         base: 0b11110010,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::CRegisterPtr,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::CRegisterPtr,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRegPtr8Rr,
         base: 0b11100010,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::CRegisterPtr,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::CRegisterPtr,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 5,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdImmPtr8,
         base: 0b11110000,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Ptr8,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Ptr8,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadImmPtr8Rr,
         base: 0b11100000,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Ptr8,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::Ptr8,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdImmPtr16,
         base: 0b11111010,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Ptr16,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Ptr16,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadImmPtr16Rr,
         base: 0b11101010,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::Ptr16,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::Ptr16,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
-        generic_opcode: GeneralOpcode::Load,
+        generic_opcode: GeneralOpcode::LoadIncrement,
         opcode: Opcode::LoadIncRdRegPtr16,
         base: 0b00101010,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::HLRegisterPtr,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
-        generic_opcode: GeneralOpcode::Load,
+        generic_opcode: GeneralOpcode::LoadDecrement,
         opcode: Opcode::LoadDecRdRegPtr16,
         base: 0b00111010,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::HLRegisterPtr,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
-        generic_opcode: GeneralOpcode::Load,
+        generic_opcode: GeneralOpcode::LoadIncrement,
         opcode: Opcode::LoadIncRegPtr16Rr,
         base: 0b00100010,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::HLRegisterPtr,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+        ],
     },
     InstructionDesc {
-        generic_opcode: GeneralOpcode::Load,
+        generic_opcode: GeneralOpcode::LoadDecrement,
         opcode: Opcode::LoadDecRegPtr16Rr,
         base: 0b00110010,
-        input_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::ARegister,
-            shift: 0,
-        }),
-        output_desc: Some(OperandDesc {
-            operand_type: OperandDiscriminants::HLRegisterPtr,
-            shift: 0,
-        }),
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+        ],
     },
 ];
 
@@ -445,56 +478,34 @@ static ref OPCODEMAP: HashMap<Opcode, &'static InstructionDesc> = {
 };
 }
 
-fn match_description(
-    instruction: Option<InstructionDesc>,
-    input_operand: Option<OperandDiscriminants>,
-    output_operand: Option<OperandDiscriminants>,
+fn match_descriptions(
+    operand_descriptions: &[OperandDesc],
+    operands: &[OperandDiscriminants],
 ) -> bool {
-    let match_input = match (instruction.clone(), input_operand) {
-        (None, None) => false,
-        (Some(ins_desc), Some(op_desc)) => {
-            if let Some(equals) = ins_desc
-                .input_desc
-                .and_then(|f| Some(f.operand_type == op_desc))
-            {
-                equals
-            } else {
-                false
-            }
-        }
-        (_, _) => false,
-    };
-
-    let match_output = match (instruction, input_operand) {
-        (None, None) => false,
-        (Some(ins_desc), Some(op_desc)) => {
-            if let Some(equals) = ins_desc
-                .input_desc
-                .and_then(|f| Some(f.operand_type == op_desc))
-            {
-                equals
-            } else {
-                false
-            }
-        }
-        (_, _) => false,
-    };
-
-    match_input && match_output
+    if operand_descriptions.len() == operands.len() {
+        let iter = zip(operand_descriptions, operands);
+        iter.fold(true, |acc, (desc, disc)| {
+            (desc.operand_type == *disc) && acc
+        })
+    } else {
+        false
+    }
 }
 
 pub fn find_instruction(
     general_op: GeneralOpcode,
-    input: Option<OperandDiscriminants>,
-    output: Option<OperandDiscriminants>,
+    operands: &Vec<Operand>,
 ) -> Option<&'static InstructionDesc> {
-    // Get all the keys which match the operand discr. and the general opcode.
-    let result = OPCODEMAP.iter().find(|(_, &value)| {
-        match_description(Some(value.clone()), input, output) && value.generic_opcode == general_op
+    let discriminants: Vec<OperandDiscriminants> = operands
+        .iter()
+        .map(|op| OperandDiscriminants::from(op))
+        .collect();
+    let find_result = OPCODEMAP.iter().find(|(_, &value)| {
+        value.generic_opcode == general_op
+            && match_descriptions(value.operand_descriptions, &discriminants.as_slice())
     });
-
-    match result {
-        Some((_, desc)) => Some(&desc),
+    match find_result {
+        Some((_, desc)) => Some(desc),
         None => None,
     }
 }

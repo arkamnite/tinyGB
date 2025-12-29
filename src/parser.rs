@@ -91,11 +91,6 @@ fn parse_identifier(identifier_token: &str, lexer: &mut logos::Lexer<'_, Token>)
     Err(("Unexpected identifier found here".to_owned(), span))
 }
 
-enum ExpectOperand {
-    Input,
-    Output,
-}
-
 fn parse_instruction(opcode: GeneralOpcode, lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
     let mut parsed_operands: Vec<Operand> = vec![];
     let span = lexer.span();
@@ -103,25 +98,11 @@ fn parse_instruction(opcode: GeneralOpcode, lexer: &mut logos::Lexer<'_, Token>)
     while let Some(token) = lexer.next() {
         match token {
             Ok(Token::Newline) => {
-                let mut parsed_input_operand: Option<Operand> = None;
-                let mut parsed_output_operand: Option<Operand> = None;
-
-                let operands_as_arr = parsed_operands.as_slice();
-
-                if parsed_operands.len() == 1 {
-                    parsed_input_operand = Some(operands_as_arr[0].clone());
-                } else if parsed_operands.len() == 2 {
-                    parsed_output_operand = Some(operands_as_arr[0].clone());
-                    parsed_input_operand = Some(operands_as_arr[1].clone());
-                }
-
-                if let Some(instr_vec) = find_instruction(
-                    opcode.clone(),
-                    parsed_input_operand.map_or(None, |opt| Some(OperandDiscriminants::from(opt))),
-                    parsed_output_operand.map_or(None, |opt| Some(OperandDiscriminants::from(opt))),
-                ) {
+                if let Some(instr_vec) = find_instruction(opcode.clone(), &parsed_operands) {
                     // Encode the value now
-                    return Ok(Value::Instruction(instr_vec.encode(operands_as_arr)?));
+                    return Ok(Value::Instruction(
+                        instr_vec.encode(&parsed_operands.as_slice())?,
+                    ));
                 } else {
                     return Err((
                         format!("unable to match instruction: {}", opcode.as_ref()).to_owned(),
