@@ -30,6 +30,18 @@ pub enum Operand {
     SignedImm4(u8),
 }
 
+impl Operand {
+    fn try_register8_to_aregister(&self) -> Option<Operand> {
+        match self {
+            Operand::Register8(register8) => match register8 {
+                Register8::A => Some(Operand::ARegister(ARegister::A)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
 impl TryFrom<Token> for Operand {
     type Error = (&'static str, Token);
 
@@ -38,7 +50,7 @@ impl TryFrom<Token> for Operand {
             Token::StringLiteral => todo!(),
             Token::Identifier => todo!(),
             Token::Register(register) => match register {
-                crate::gb::register::Register::A => Ok(Operand::ARegister(ARegister::A)),
+                crate::gb::register::Register::A => Ok(Operand::Register8(Register8::A)),
                 crate::gb::register::Register::B => Ok(Operand::Register8(Register8::B)),
                 crate::gb::register::Register::C => Ok(Operand::Register8(Register8::C)),
                 crate::gb::register::Register::D => Ok(Operand::Register8(Register8::D)),
@@ -78,12 +90,6 @@ pub struct OperandDesc {
 }
 
 #[derive(Clone)]
-/// A more forward-compatible definition would
-/// be to use an array of OperandDesc, and then
-/// specify indices for these in the table to help
-/// identify input and output operands. This will
-/// allow for ISAs which have multiple (input)
-/// operands for instructions.
 pub struct InstructionDesc {
     opcode: Opcode,
     generic_opcode: GeneralOpcode,
@@ -94,6 +100,7 @@ pub struct InstructionDesc {
 impl InstructionDesc {
     pub fn encode(&self, operands: &[Operand]) -> Result<Vec<u8>, ParserError> {
         let mut bytes: Vec<u8> = vec![];
+        println!("Opcode: {:?}, Operands: {:?}", self.opcode, operands);
         match self.opcode {
             Opcode::Nop => todo!(),
             Opcode::Stop => todo!(),
@@ -118,41 +125,6 @@ impl InstructionDesc {
     }
 }
 
-// how are we going to group the instructions
-// for the parser? a.k.a. the parser will just
-// see the identifier string. It won't know at
-// that point what operands there are etc., and
-// thus won't know the difference between diff.
-// load opcodes. Do we need to define variants
-// on the identifiers themselves, i.e. a very
-// limited set:
-//
-// - ld
-// - add, sub
-// - nop, stop
-// - etc.?
-//
-// These can probably live in the parser end; we
-// just need to define a higher level of variant
-// that groups all of these, and provide a match
-// function.
-//
-// fetch map: Key = Opcode, Value = InstructionDesc
-//
-// match fn: GeneralOpcode, InOpDisc, OutOpDisc -> Option<Opcode>
-// - strum-generated 'from' func on operands provides OpDisc
-// - lives in the parser; needs to iterate through values of the
-//   map to find a key that matches these two operand descriptions.
-// - the parser GeneralOpcode has to be used to distinguish between
-//   the same operand classes being used across add, load etc.
-// - an acceptable level of ambiguity is between different general
-//   opcodes but not within the same general opcode. Otherwise, what's
-//   the point in having different opcodes to begin with?
-//
-// encoding fn: InstructionDesc, InOperand, OutOperand -> Option<Vec<u8>>
-// - verify legal operands
-// - output operands as separate bytes if needed (i.e. imm values)
-//
 // note for later: might be a good idea to use a builder of sorts
 // for the byte(s). This could help simplify the legalisation logic?
 
@@ -478,14 +450,28 @@ static ref OPCODEMAP: HashMap<Opcode, &'static InstructionDesc> = {
 };
 }
 
-fn match_descriptions(
-    operand_descriptions: &[OperandDesc],
-    operands: &[OperandDiscriminants],
-) -> bool {
+fn check_match_operand(desc: &OperandDesc, operand: &Operand) -> bool {
+    let actual_type = desc.operand_type;
+    if actual_type != OperandDiscriminants::from(operand) {
+        match (desc.operand_type, operand) {
+            (OperandDiscriminants::ARegister, Operand::Register8(r)) => {
+                match operand.try_register8_to_aregister() {
+                    Some(_) => true,
+                    None => false,
+                }
+            }
+            _ => false,
+        }
+    } else {
+        true
+    }
+}
+
+fn match_descriptions(operand_descriptions: &[OperandDesc], operands: &[Operand]) -> bool {
     if operand_descriptions.len() == operands.len() {
         let iter = zip(operand_descriptions, operands);
-        iter.fold(true, |acc, (desc, disc)| {
-            (desc.operand_type == *disc) && acc
+        iter.fold(true, |acc, (desc, operand)| {
+            check_match_operand(desc, operand) && acc
         })
     } else {
         false
@@ -496,13 +482,9 @@ pub fn find_instruction(
     general_op: GeneralOpcode,
     operands: &Vec<Operand>,
 ) -> Option<&'static InstructionDesc> {
-    let discriminants: Vec<OperandDiscriminants> = operands
-        .iter()
-        .map(|op| OperandDiscriminants::from(op))
-        .collect();
     let find_result = OPCODEMAP.iter().find(|(_, &value)| {
         value.generic_opcode == general_op
-            && match_descriptions(value.operand_descriptions, &discriminants.as_slice())
+            && match_descriptions(value.operand_descriptions, &operands.as_slice())
     });
     match find_result {
         Some((_, desc)) => Some(desc),

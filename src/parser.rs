@@ -46,11 +46,8 @@ pub fn parse(lexer: &mut logos::Lexer<'_, Token>) -> Result<Vec<Value>> {
     let mut values: Vec<Value> = Vec::new();
     while let Some(token) = lexer.next() {
         match token {
-            Ok(Token::Newline) => {
-                println!("Parser: Newline");
-            }
+            Ok(Token::Newline) => {}
             Ok(Token::Identifier) => {
-                println!("Parser: Identifier");
                 values.push(parse_identifier(lexer.slice(), lexer)?);
             }
             _ => {
@@ -125,8 +122,32 @@ fn parse_instruction(opcode: GeneralOpcode, lexer: &mut logos::Lexer<'_, Token>)
                     }
                 }
             }
-            Ok(Token::RegisterPtr(rp)) => {
-                todo!()
+            Ok(Token::RegisterPtr(p)) => {
+                let try_operand = Operand::try_from(Token::RegisterPtr(p)).ok();
+                match try_operand {
+                    Some(op) => parsed_operands.push(op),
+                    None => {
+                        return Err((("Invalid operand provided!").to_string(), span));
+                    }
+                }
+            }
+            Ok(Token::Register16(r)) => {
+                let try_operand = Operand::try_from(Token::Register16(r)).ok();
+                match try_operand {
+                    Some(op) => parsed_operands.push(op),
+                    None => {
+                        return Err((("Invalid operand provided!").to_string(), span));
+                    }
+                }
+            }
+            Ok(Token::RegisterPtr16(p)) => {
+                let try_operand = Operand::try_from(Token::RegisterPtr16(p)).ok();
+                match try_operand {
+                    Some(op) => parsed_operands.push(op),
+                    None => {
+                        return Err((("Invalid operand provided!").to_string(), span));
+                    }
+                }
             }
             Ok(Token::Integer(i)) => {
                 // Check if this is wider than u8, demote if not.
