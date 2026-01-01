@@ -98,12 +98,32 @@ pub struct InstructionDesc {
 }
 
 impl InstructionDesc {
-    pub fn encode(&self, operands: &[Operand]) -> Result<Vec<u8>, ParserError> {
+    pub fn encode(&self, operands: &[Operand]) -> Result<Vec<u8>, (String, Opcode)> {
         let mut bytes: Vec<u8> = vec![];
         println!("Opcode: {:?}, Operands: {:?}", self.opcode, operands);
         match self.opcode {
-            Opcode::Nop => todo!(),
-            Opcode::Stop => todo!(),
+            Opcode::Nop => {
+                if operands.len() > 0 {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        Opcode::Nop,
+                    ))
+                } else {
+                    bytes.push(0b00000000);
+                    Ok(bytes)
+                }
+            }
+            Opcode::Stop => {
+                if operands.len() > 0 {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        Opcode::Stop,
+                    ))
+                } else {
+                    bytes.push(0b00010000);
+                    Ok(bytes)
+                }
+            }
             Opcode::LoadRdRr => todo!(),
             Opcode::LoadRdImm8 => todo!(),
             Opcode::LoadRdHLRegPtr => todo!(),
@@ -180,6 +200,18 @@ pub enum Opcode {
 }
 
 static OPCODES: &[InstructionDesc] = &[
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Nop,
+        opcode: Opcode::Nop,
+        base: 0b00000000,
+        operand_descriptions: &[],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Stop,
+        opcode: Opcode::Stop,
+        base: 0b00010000,
+        operand_descriptions: &[],
+    },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Load,
         opcode: Opcode::LoadRdRr,
@@ -489,5 +521,38 @@ pub fn find_instruction(
     match find_result {
         Some((_, desc)) => Some(desc),
         None => None,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_encode_nop() {
+        let nop_opcode_desc = OPCODEMAP.get(&Opcode::Nop);
+        match nop_opcode_desc {
+            Some(desc) => {
+                assert_eq!(desc.encode(&[]).ok(), Some(vec![0b00000000]));
+                assert_eq!(desc.encode(&[Operand::Imm8(0)]).ok(), None);
+            }
+            None => {
+                assert!(false, "Couldn't find NOP opcode in table!")
+            }
+        }
+    }
+
+    #[test]
+    fn test_encode_stop() {
+        let stop_opcode_desc = OPCODEMAP.get(&Opcode::Stop);
+        match stop_opcode_desc {
+            Some(desc) => {
+                assert_eq!(desc.encode(&[]).ok(), Some(vec![0b00010000]));
+                assert_eq!(desc.encode(&[Operand::Imm8(0)]).ok(), None);
+            }
+            None => {
+                assert!(false, "Couldn't find STOP opcode in table!")
+            }
+        }
     }
 }

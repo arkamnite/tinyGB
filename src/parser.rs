@@ -62,14 +62,6 @@ pub fn parse(lexer: &mut logos::Lexer<'_, Token>) -> Result<Vec<Value>> {
     }
 }
 
-// fn match_operand_description(
-//     operand_types: Vec<OperandType>,
-//     options: Vec<&OpcodeDesc>,
-// ) -> Option<&OpcodeDesc> {
-//     options.into_iter().find(|x| x.operands.eq(&operand_types))
-// }
-
-// We have already consumed the identifier token
 fn parse_identifier(identifier_token: &str, lexer: &mut logos::Lexer<'_, Token>) -> Result<Value> {
     let span = lexer.span();
 
@@ -96,10 +88,15 @@ fn parse_instruction(opcode: GeneralOpcode, lexer: &mut logos::Lexer<'_, Token>)
         match token {
             Ok(Token::Newline) => {
                 if let Some(instr_vec) = find_instruction(opcode.clone(), &parsed_operands) {
-                    // Encode the value now
-                    return Ok(Value::Instruction(
-                        instr_vec.encode(&parsed_operands.as_slice())?,
-                    ));
+                    // TODO: Return the actual encoding error.
+                    match instr_vec.encode(&parsed_operands.as_slice()).ok() {
+                        Some(bytes) => {
+                            return Ok(Value::Instruction(bytes));
+                        }
+                        None => {
+                            return Err((("Could not encode instruction!").to_string(), span));
+                        }
+                    }
                 } else {
                     return Err((
                         format!("unable to match instruction: {}", opcode.as_ref()).to_owned(),
