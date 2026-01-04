@@ -75,7 +75,7 @@ pub enum Token {
     #[regex("#[0-9]+", |lex| lex.slice()[1..].parse::<u16>().unwrap())]
     Integer(u16),
 
-    #[regex(r"\$[0-9]+", |lex| lex.slice()[1..].parse::<u16>().unwrap())]
+    #[regex(r"\$[0-9]+", |lex| u16::from_str_radix(&lex.slice()[1..], 16).unwrap())]
     IntegerPointer(u16),
 }
 
