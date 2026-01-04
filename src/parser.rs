@@ -27,6 +27,8 @@ pub enum GeneralOpcode {
     LoadIncrement,
     #[strum(serialize = "ldd")]
     LoadDecrement,
+    #[strum(serialize = "jp")]
+    Jump,
 }
 
 pub enum Value {
@@ -58,6 +60,7 @@ impl Parser {
             val if val == GeneralOpcode::LoadDecrement.as_ref() => {
                 Some(GeneralOpcode::LoadDecrement)
             }
+            val if val == GeneralOpcode::Jump.as_ref() => Some(GeneralOpcode::Jump),
             _ => None,
         }
     }
@@ -276,9 +279,20 @@ impl Parser {
                     // Check if this is wider than u8, demote if not.
                     // Also check for signed range based on previous
                     // instruction?
+                    todo!()
                 }
                 Ok(Token::IntegerPointer(ip)) => {
                     // Check if wider than u8, demote if not.
+                    match opcode {
+                        GeneralOpcode::Jump => {
+                            if let Some(op) = Operand::try_from(Token::IntegerPointer(ip)).ok() {
+                                parsed_operands.push(op);
+                            } else {
+                                return Err((("Invalid operand provided!").to_string(), span));
+                            }
+                        }
+                        _ => todo!(),
+                    }
 
                     // specific range + reg combo should
                     // be matched to Opcode::LoadImmPtr8Rr

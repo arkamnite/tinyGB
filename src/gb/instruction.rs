@@ -77,7 +77,7 @@ impl TryFrom<Token> for Operand {
                 _ => Err(("Only BC and DE register pairs can be used as general-purpose 16-bit register pointers", value))
             },
             Token::Integer(_) => todo!(),
-            Token::IntegerPointer(_) => todo!(),
+            Token::IntegerPointer(addr) => Ok(Operand::Ptr16(addr)),
             _ => Err(("Token does not map to operand!", value)),
         }
     }
@@ -109,7 +109,7 @@ impl InstructionDesc {
                         Opcode::Nop,
                     ))
                 } else {
-                    bytes.push(0b00000000);
+                    bytes.push(self.base);
                     Ok(bytes)
                 }
             }
@@ -120,7 +120,7 @@ impl InstructionDesc {
                         Opcode::Stop,
                     ))
                 } else {
-                    bytes.push(0b00010000);
+                    bytes.push(self.base);
                     Ok(bytes)
                 }
             }
@@ -141,6 +141,26 @@ impl InstructionDesc {
             Opcode::LoadDecRdRegPtr16 => todo!(),
             Opcode::LoadIncRegPtr16Rr => todo!(),
             Opcode::LoadDecRegPtr16Rr => todo!(),
+            Opcode::JumpPtr16 => {
+                if operands.len() != 1 {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        Opcode::JumpPtr16,
+                    ))
+                } else {
+                    if let Operand::Ptr16(addr) = operands[0] {
+                        bytes.push(self.base);
+                        bytes.push(addr as u8);
+                        bytes.push((addr >> 8) as u8);
+                        Ok(bytes)
+                    } else {
+                        Err((
+                            ("Incorrect operands provided for instruction!").to_string(),
+                            Opcode::Stop,
+                        ))
+                    }
+                }
+            }
         }
     }
 }
@@ -197,6 +217,9 @@ pub enum Opcode {
     LoadIncRegPtr16Rr,
     // ldd $hl, %a
     LoadDecRegPtr16Rr,
+
+    // jp $nn
+    JumpPtr16,
 }
 
 static OPCODES: &[InstructionDesc] = &[
@@ -467,6 +490,15 @@ static OPCODES: &[InstructionDesc] = &[
             },
         ],
     },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Jump,
+        opcode: Opcode::JumpPtr16,
+        base: 0b11000011,
+        operand_descriptions: &[OperandDesc {
+            operand_type: OperandDiscriminants::Ptr16,
+            shift: 0,
+        }],
+    },
 ];
 
 lazy_static::lazy_static! {
@@ -549,6 +581,24 @@ mod test {
             Some(desc) => {
                 assert_eq!(desc.encode(&[]).ok(), Some(vec![0b00010000]));
                 assert_eq!(desc.encode(&[Operand::Imm8(0)]).ok(), None);
+            }
+            None => {
+                assert!(false, "Couldn't find STOP opcode in table!")
+            }
+        }
+    }
+
+    #[test]
+    fn test_encode_jp_a16() {
+        let jp_opcode_desc = OPCODEMAP.get(&Opcode::JumpPtr16);
+        match jp_opcode_desc {
+            Some(desc) => {
+                assert_eq!(desc.encode(&[]).ok(), None);
+                assert_eq!(desc.encode(&[Operand::Imm8(0)]).ok(), None);
+                assert_eq!(
+                    desc.encode(&[Operand::Ptr16(0x0150)]).ok(),
+                    Some(vec![0b11000011, 0x50, 0x1])
+                );
             }
             None => {
                 assert!(false, "Couldn't find STOP opcode in table!")
