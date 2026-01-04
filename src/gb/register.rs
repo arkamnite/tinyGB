@@ -1,4 +1,4 @@
-use crate::gb::asm::{Encodable, PrintAsm};
+use crate::asm::encoding::{Encodable, PrintAsm};
 
 pub type TryFromRegisterError = (&'static str, Register);
 
