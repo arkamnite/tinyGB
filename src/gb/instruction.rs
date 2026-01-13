@@ -104,9 +104,9 @@ impl InstructionDesc {
         println!("Opcode: {:?}, Operands: {:?}", self.opcode, operands);
         match self.opcode {
             Opcode::Nop => {
-                if operands.len() > 0 {
+                if operands.len() != self.operand_descriptions.len() {
                     Err((
-                        ("Incorrect operands provided for instruction!").to_string(),
+                        ("Incorrect number of operands provided for instruction!").to_string(),
                         Opcode::Nop,
                     ))
                 } else {
@@ -115,9 +115,9 @@ impl InstructionDesc {
                 }
             }
             Opcode::Stop => {
-                if operands.len() > 0 {
+                if operands.len() != self.operand_descriptions.len() {
                     Err((
-                        ("Incorrect operands provided for instruction!").to_string(),
+                        ("Incorrect number of operands provided for instruction!").to_string(),
                         Opcode::Stop,
                     ))
                 } else {
@@ -126,9 +126,9 @@ impl InstructionDesc {
                 }
             }
             Opcode::LoadRdRr => {
-                if operands.len() != 2 {
+                if operands.len() != self.operand_descriptions.len() {
                     Err((
-                        ("Incorrect operands provided for instruction!").to_string(),
+                        ("Incorrect number of operands provided for instruction!").to_string(),
                         Opcode::LoadRdRr,
                     ))
                 } else {
@@ -158,7 +158,7 @@ impl InstructionDesc {
             Opcode::LoadRdRegPtr8 => {
                 if operands.len() != self.operand_descriptions.len() {
                     Err((
-                        ("Incorrect operands provided for instruction!").to_string(),
+                        ("Incorrect number of operands provided for instruction!").to_string(),
                         Opcode::LoadRdRegPtr8,
                     ))
                 } else {
@@ -179,7 +179,7 @@ impl InstructionDesc {
             Opcode::LoadRegPtr8Rr => {
                 if operands.len() != self.operand_descriptions.len() {
                     Err((
-                        ("Incorrect operands provided for instruction!").to_string(),
+                        ("Incorrect number of operands provided for instruction!").to_string(),
                         Opcode::LoadRegPtr8Rr,
                     ))
                 } else {
@@ -209,9 +209,9 @@ impl InstructionDesc {
             Opcode::LoadIncRegPtr16Rr => todo!(),
             Opcode::LoadDecRegPtr16Rr => todo!(),
             Opcode::JumpPtr16 => {
-                if operands.len() != 1 {
+                if operands.len() != self.operand_descriptions.len() {
                     Err((
-                        ("Incorrect operands provided for instruction!").to_string(),
+                        ("Incorrect number of operands provided for instruction!").to_string(),
                         Opcode::JumpPtr16,
                     ))
                 } else {
