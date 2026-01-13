@@ -155,7 +155,27 @@ impl InstructionDesc {
             Opcode::LoadHLRegPtrImm8 => todo!(),
             Opcode::LoadARegPtr16 => todo!(),
             Opcode::LoadRegPtr16AReg => todo!(),
-            Opcode::LoadRdRegPtr8 => todo!(),
+            Opcode::LoadRdRegPtr8 => {
+                if operands.len() != self.operand_descriptions.len() {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        Opcode::LoadRdRegPtr8,
+                    ))
+                } else {
+                    if let (Some(Operand::ARegister(_)), Operand::CRegisterPtr(_)) = (
+                        operands[0].clone().try_register8_to_aregister(),
+                        operands[1].clone(),
+                    ) {
+                        bytes.push(self.base);
+                        Ok(bytes)
+                    } else {
+                        Err((
+                            ("Incorrect operands provided for instruction!").to_string(),
+                            Opcode::LoadRdRegPtr8,
+                        ))
+                    }
+                }
+            }
             Opcode::LoadRegPtr8Rr => todo!(),
             Opcode::LoadRdImmPtr8 => todo!(),
             Opcode::LoadImmPtr8Rr => todo!(),
@@ -658,6 +678,62 @@ mod test {
             }
             None => {
                 assert!(false, "Couldn't find LoadRdRr opcode in table!")
+            }
+        }
+    }
+
+    #[test]
+    fn test_encode_ldrdregptr8() {
+        let opcode_desc = OPCODEMAP.get(&Opcode::LoadRdRegPtr8);
+        match opcode_desc {
+            Some(desc) => {
+                assert_eq!(desc.encode(&[]).ok(), None);
+                assert_eq!(desc.encode(&[Operand::Imm8(0)]).ok(), None);
+                assert_eq!(desc.encode(&[Operand::Ptr16(0x0150)]).ok(), None);
+                assert_eq!(desc.encode(&[Operand::Register8(Register8::A)]).ok(), None);
+                assert_eq!(
+                    desc.encode(&[
+                        Operand::Register8(Register8::A),
+                        Operand::Register16(Register16::Bc)
+                    ])
+                    .ok(),
+                    None
+                );
+                assert_eq!(
+                    desc.encode(&[
+                        Operand::Register8(Register8::A),
+                        Operand::Register8(Register8::B)
+                    ])
+                    .ok(),
+                    None
+                );
+                assert_eq!(
+                    desc.encode(&[
+                        Operand::Register8(Register8::C),
+                        Operand::RegisterPtr8(RegisterPtr8::A)
+                    ])
+                    .ok(),
+                    None
+                );
+                assert_eq!(
+                    desc.encode(&[
+                        Operand::Register8(Register8::A),
+                        Operand::RegisterPtr8(RegisterPtr8::C)
+                    ])
+                    .ok(),
+                    None
+                );
+                assert_eq!(
+                    desc.encode(&[
+                        Operand::Register8(Register8::A),
+                        Operand::CRegisterPtr(CRegisterPtr::C)
+                    ])
+                    .ok(),
+                    Some(vec![0b11110010])
+                );
+            }
+            None => {
+                assert!(false, "Couldn't find LoadRdRegPtr8 opcode in table!")
             }
         }
     }
