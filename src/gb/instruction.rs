@@ -625,7 +625,7 @@ mod test {
                 );
             }
             None => {
-                assert!(false, "Couldn't find STOP opcode in table!")
+                assert!(false, "Couldn't find JumpPtr16 opcode in table!")
             }
         }
     }
