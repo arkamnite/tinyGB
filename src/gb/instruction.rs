@@ -5,6 +5,7 @@ use std::{collections::HashMap, iter::zip, u8};
 use strum_macros::{EnumDiscriminants, IntoStaticStr};
 
 use crate::{
+    asm::encoding::Encodable,
     gb::register::{
         ARegister, CRegisterPtr, HLRegisterPtr, PushPopRegister16, Register16, Register8,
         RegisterPtr16, RegisterPtr8,
@@ -124,7 +125,30 @@ impl InstructionDesc {
                     Ok(bytes)
                 }
             }
-            Opcode::LoadRdRr => todo!(),
+            Opcode::LoadRdRr => {
+                if operands.len() != 2 {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        Opcode::LoadRdRr,
+                    ))
+                } else {
+                    if let (Operand::Register8(rd), Operand::Register8(rr)) =
+                        (operands[0].clone(), operands[1].clone())
+                    {
+                        bytes.push(
+                            self.base
+                                | rd.encode() << self.operand_descriptions[0].shift
+                                | rr.encode() << self.operand_descriptions[1].shift,
+                        );
+                        Ok(bytes)
+                    } else {
+                        Err((
+                            ("Incorrect operands provided for instruction!").to_string(),
+                            Opcode::LoadRdRr,
+                        ))
+                    }
+                }
+            }
             Opcode::LoadRdImm8 => todo!(),
             Opcode::LoadRdHLRegPtr => todo!(),
             Opcode::LoadHLRegPtrRr => todo!(),
@@ -242,11 +266,11 @@ static OPCODES: &[InstructionDesc] = &[
         operand_descriptions: &[
             OperandDesc {
                 operand_type: OperandDiscriminants::Register8,
-                shift: 5,
+                shift: 3,
             },
             OperandDesc {
                 operand_type: OperandDiscriminants::Register8,
-                shift: 2,
+                shift: 0,
             },
         ],
     },
@@ -602,6 +626,38 @@ mod test {
             }
             None => {
                 assert!(false, "Couldn't find STOP opcode in table!")
+            }
+        }
+    }
+
+    #[test]
+    fn test_encode_ldrdrr() {
+        let opcode_desc = OPCODEMAP.get(&Opcode::LoadRdRr);
+        match opcode_desc {
+            Some(desc) => {
+                assert_eq!(desc.encode(&[]).ok(), None);
+                assert_eq!(desc.encode(&[Operand::Imm8(0)]).ok(), None);
+                assert_eq!(desc.encode(&[Operand::Ptr16(0x0150)]).ok(), None);
+                assert_eq!(desc.encode(&[Operand::Register8(Register8::A)]).ok(), None);
+                assert_eq!(
+                    desc.encode(&[
+                        Operand::Register8(Register8::A),
+                        Operand::Register16(Register16::Bc)
+                    ])
+                    .ok(),
+                    None
+                );
+                assert_eq!(
+                    desc.encode(&[
+                        Operand::Register8(Register8::A),
+                        Operand::Register8(Register8::B)
+                    ])
+                    .ok(),
+                    Some(vec![0b01111000])
+                );
+            }
+            None => {
+                assert!(false, "Couldn't find LoadRdRr opcode in table!")
             }
         }
     }
