@@ -115,7 +115,7 @@ impl RomBuilder {
         self.data[0x014d] = self.header_data.checksum;
     }
 
-    pub fn write_values(value: Value) -> Result<(), String> {
+    pub fn write_values(value: Value) -> Result<Self, String> {
         // enforce cartridge type from header
         todo!()
     }
