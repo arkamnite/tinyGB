@@ -214,16 +214,15 @@ impl Parser {
             match token {
                 Ok(Token::Newline) => {
                     if let Some(instr_vec) = find_instruction(opcode.clone(), &parsed_operands) {
-                        // TODO: Return the actual encoding error.
-                        match instr_vec.encode(&parsed_operands.as_slice()).ok() {
-                            Some(bytes) => {
+                        match instr_vec.encode(&parsed_operands.as_slice()) {
+                            Ok(bytes) => {
                                 return Ok(Value::Instruction {
                                     bank_section: self.current_section.clone(),
                                     bytes,
                                 });
                             }
-                            None => {
-                                return Err((("Could not encode instruction!").to_string(), span));
+                            Err(e) => {
+                                return Err((format!("{}, opcode: {:?}", e.0, e.1), span));
                             }
                         }
                     } else {
