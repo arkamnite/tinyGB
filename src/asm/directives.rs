@@ -11,6 +11,16 @@ pub enum Section {
     RomBank1,
 }
 
+impl Section {
+    pub fn get_section_index(&self) -> usize {
+        match self {
+            Section::EntrySection => 0,
+            Section::RomBank0 => 0,
+            Section::RomBank1 => 1,
+        }
+    }
+}
+
 pub fn match_directive(directive: &str) -> Option<Directives> {
     match &directive[1..] {
         "section" => Some(Directives::Section),

@@ -7,39 +7,40 @@ const LOGO_BYTES: &[u8] = &[
 ];
 
 #[derive(Clone)]
-enum CartridgeMapper {
+pub enum CartridgeMapper {
     RomOnly = 0x00,
+    Mbc2 = 0x05,
+    Mbc3 = 0x11,
+    Mbc5 = 0x19,
 }
 
-enum RomSizes {
-    KiB32,
-    KiB64,
-    KiB128,
-    KiB256,
-    KiB512,
-    MiB1,
-    MiB2,
-    MiB4,
-    MiB8,
-}
+impl CartridgeMapper {
+    pub fn get_max_banks(&self) -> usize {
+        match self {
+            CartridgeMapper::RomOnly => 2,
+            CartridgeMapper::Mbc2 => 16,
+            CartridgeMapper::Mbc3 => 128,
+            CartridgeMapper::Mbc5 => 512,
+        }
+    }
 
-struct RomSizeData {
-    value: u8,
-    size: RomSizes,
-}
+    pub fn get_rom_size_header_info(&self) -> u8 {
+        match self {
+            CartridgeMapper::RomOnly => 0x00,
+            CartridgeMapper::Mbc2 => 0x03,
+            CartridgeMapper::Mbc3 => 0x06,
+            CartridgeMapper::Mbc5 => 0x08,
+        }
+    }
 
-const ROM_SIZE_00: RomSizeData = RomSizeData {
-    value: 0x0,
-    size: RomSizes::KiB32,
-};
-
-#[derive(Clone)]
-enum RamSizes {
-    None = 0x00,
-    KiB8 = 0x02,
-    KiB32 = 0x03,
-    KiB128 = 0x04,
-    KiB64 = 0x05,
+    pub fn get_ram_size_header_info(&self) -> u8 {
+        match self {
+            CartridgeMapper::RomOnly => 0,
+            CartridgeMapper::Mbc2 => 0,
+            CartridgeMapper::Mbc3 => 0,
+            CartridgeMapper::Mbc5 => 0,
+        }
+    }
 }
 
 struct Header {
@@ -50,8 +51,8 @@ struct Header {
     publisher: [char; 2],            // 0x0144 - 0x0145
     sgb_flag: u8,                    // 0x0146
     cartridge_type: CartridgeMapper, // 0x0147
-    rom_size: RomSizeData,           // 0x0148
-    ram_size: RamSizes,              // 0x0149
+    rom_size: u8,                    // 0x0148
+    ram_size: u8,                    // 0x0149
     destination_code: bool,          // 0x014A
     old_publisher: u8,               // 0x014B
     mask_rom_number: u8,             // 0x014C
@@ -70,8 +71,8 @@ impl Default for Header {
             publisher: ['0', '0'],
             sgb_flag: 0x00,
             cartridge_type: CartridgeMapper::RomOnly,
-            rom_size: ROM_SIZE_00,
-            ram_size: RamSizes::None,
+            rom_size: CartridgeMapper::RomOnly.get_rom_size_header_info(),
+            ram_size: CartridgeMapper::RomOnly.get_ram_size_header_info(),
             destination_code: true,
             old_publisher: 0x00,
             mask_rom_number: 0x00,
@@ -86,21 +87,43 @@ pub struct Rom {
     pub data: Vec<u8>,
 }
 
+#[derive(Clone)]
 struct RomBank {
-    bytes: [u8; 0x4000],
+    pub bytes: [u8; 0x4000],
+    pub cursor: usize,
 }
+
+impl Default for RomBank {
+    fn default() -> Self {
+        Self {
+            bytes: [0xff; 0x4000],
+            cursor: 0,
+        }
+    }
+}
+
+impl RomBank {}
 
 pub struct RomBuilder {
     // header
-    header_data: Header,
-    data: Vec<u8>, // bytes for the rom!
+    header_info: Header,
+    rom_banks: Box<[RomBank]>,
+    max_banks: usize,
+
+    entry_cursor: usize,
 }
 
 impl RomBuilder {
-    pub fn new() -> RomBuilder {
+    pub fn new(mbc: CartridgeMapper) -> RomBuilder {
+        let mut default_header = Header::default();
+        default_header.cartridge_type = mbc.clone();
+        default_header.rom_size = mbc.get_rom_size_header_info();
+        default_header.ram_size = mbc.get_ram_size_header_info();
         RomBuilder {
-            header_data: Header::default(),
-            data: vec![0xff; 0x8000],
+            header_info: default_header,
+            rom_banks: vec![RomBank::default(); mbc.get_max_banks()].into_boxed_slice(),
+            max_banks: mbc.get_max_banks(),
+            entry_cursor: 4,
         }
     }
 
@@ -108,16 +131,67 @@ impl RomBuilder {
         let mut checksum: u8 = 0;
 
         for addr in 0x0134..0x014d {
-            checksum = u8::wrapping_sub(u8::wrapping_sub(checksum, self.data[addr]), 1);
+            checksum =
+                u8::wrapping_sub(u8::wrapping_sub(checksum, self.rom_banks[0].bytes[addr]), 1);
         }
 
-        self.header_data.checksum = checksum;
-        self.data[0x014d] = self.header_data.checksum;
+        self.header_info.checksum = checksum;
+        self.rom_banks[0].bytes[0x014d] = self.header_info.checksum;
     }
 
-    pub fn write_values(value: Value) -> Result<Self, String> {
-        // enforce cartridge type from header
-        todo!()
+    pub fn write_values(&mut self, value: Value) -> Result<&mut Self, String> {
+        match value {
+            Value::Instruction {
+                bank_section,
+                bytes,
+            } => {
+                if bank_section.get_section_index() >= self.max_banks {
+                    return Err("Provided section ID is out of bounds!".to_string());
+                }
+
+                match bank_section {
+                    crate::asm::directives::Section::EntrySection => {
+                        // This is the only time we use the built-in cursor for
+                        // ROM Bank 0, although we only have a few bytes to use here.
+                        if bytes.len() > self.entry_cursor {
+                            return Err("Ran out of entry section bytes!".to_string());
+                        }
+
+                        for (_, &byte) in bytes.iter().enumerate() {
+                            self.rom_banks[0].bytes[4 - self.entry_cursor + 0x100] = byte;
+                            self.entry_cursor = self.entry_cursor - 1;
+                        }
+                    }
+                    crate::asm::directives::Section::RomBank0 => {
+                        // Our cursor should always be offset by the end of the header.
+                        if bytes.len()
+                            > (self.rom_banks[0].bytes.len() - self.rom_banks[0].cursor - 0x150)
+                        {
+                            return Err("Ran out of bytes for ROM bank 0!".to_string());
+                        } else {
+                            let bank = &mut self.rom_banks[0];
+                            bank.bytes[bank.cursor + 0x150..(bank.cursor + bytes.len() + 0x150)]
+                                .clone_from_slice(bytes.as_slice());
+                            bank.cursor = bank.cursor + bytes.len();
+                        }
+                    }
+                    _ => {
+                        let index = bank_section.get_section_index();
+                        let bank = &mut self.rom_banks[index];
+                        if bytes.len() > (bank.bytes.len() - bank.cursor) {
+                            return Err(
+                                format!("Ran out of bytes for ROM bank {}", index).to_string()
+                            );
+                        } else {
+                            bank.bytes[bank.cursor..(bank.cursor + bytes.len())]
+                                .clone_from_slice(bytes.as_slice());
+                            bank.cursor = bank.cursor + bytes.len();
+                        }
+                    }
+                }
+            }
+        }
+        Ok(self)
     }
 
     fn char_to_vec(chars: &[char]) -> Vec<u8> {
@@ -125,49 +199,50 @@ impl RomBuilder {
     }
 
     fn write_header(&mut self) {
-        // build placholder bytes 0x100 - 0x103?
-        // nop; jp $0150
+        self.rom_banks[0].bytes[0x0104..0x0134].clone_from_slice(LOGO_BYTES);
 
-        self.data[0x0104..0x0134].clone_from_slice(LOGO_BYTES);
+        self.rom_banks[0].bytes[0x0134..0x0144]
+            .clone_from_slice(RomBuilder::char_to_vec(&self.header_info.title).as_slice());
 
-        self.data[0x0134..0x0144]
-            .clone_from_slice(RomBuilder::char_to_vec(&self.header_data.title).as_slice());
+        self.rom_banks[0].bytes[0x013f..0x0143]
+            .clone_from_slice(RomBuilder::char_to_vec(&self.header_info.manufacturer).as_slice());
 
-        self.data[0x013f..0x0143]
-            .clone_from_slice(RomBuilder::char_to_vec(&self.header_data.manufacturer).as_slice());
+        self.rom_banks[0].bytes[0x0143] = self.header_info.cgb_flag;
 
-        self.data[0x0143] = self.header_data.cgb_flag;
+        self.rom_banks[0].bytes[0x0144..0x0146]
+            .clone_from_slice(RomBuilder::char_to_vec(&self.header_info.publisher).as_slice());
 
-        self.data[0x0144..0x0146]
-            .clone_from_slice(RomBuilder::char_to_vec(&self.header_data.publisher).as_slice());
+        self.rom_banks[0].bytes[0x0146] = self.header_info.sgb_flag;
 
-        self.data[0x0146] = self.header_data.sgb_flag;
-
-        self.data[0x0147] = self.header_data.cartridge_type.clone() as u8;
-        self.data[0x0148] = self.header_data.rom_size.value;
-        self.data[0x0149] = self.header_data.ram_size.clone() as u8;
-        self.data[0x014A] = self.header_data.destination_code as u8;
-        self.data[0x014B] = self.header_data.old_publisher;
-        self.data[0x014C] = self.header_data.mask_rom_number;
-        self.data[0x014D] = self.header_data.checksum;
-        self.data[0x014E..0x0150].clone_from_slice(&self.header_data.global_checksum);
+        self.rom_banks[0].bytes[0x0147] = self.header_info.cartridge_type.clone() as u8;
+        self.rom_banks[0].bytes[0x0148] = self.header_info.rom_size;
+        self.rom_banks[0].bytes[0x0149] = self.header_info.ram_size;
+        self.rom_banks[0].bytes[0x014A] = self.header_info.destination_code as u8;
+        self.rom_banks[0].bytes[0x014B] = self.header_info.old_publisher;
+        self.rom_banks[0].bytes[0x014C] = self.header_info.mask_rom_number;
+        self.rom_banks[0].bytes[0x014D] = self.header_info.checksum;
+        self.rom_banks[0].bytes[0x014E..0x0150].clone_from_slice(&self.header_info.global_checksum);
 
         self.calculate_header_checksum();
     }
 
     pub fn build_rom(&mut self) -> Rom {
-        // build placeholder bytes?
+        let mut rom_bytes: Vec<u8> = vec![];
         self.write_header();
 
-        Rom {
-            data: self.data.clone(),
+        for bank in &self.rom_banks {
+            for (_, byte) in bank.bytes.iter().enumerate() {
+                rom_bytes.push(*byte);
+            }
         }
+
+        Rom { data: rom_bytes }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::rom_builder::{RomBuilder, LOGO_BYTES};
+    use crate::rom_builder::{CartridgeMapper, RomBuilder, LOGO_BYTES};
 
     #[test]
     /// The Game Boy boot ROM expects the 'logo bytes' to be found
@@ -175,7 +250,7 @@ mod test {
     /// tests that the final ROM built contains the correct bytes
     /// for this check.
     fn check_logo_dump() {
-        let mut builder = RomBuilder::new();
+        let mut builder = RomBuilder::new(CartridgeMapper::RomOnly);
         let rom = builder.build_rom();
 
         assert_eq!(rom.data.as_slice()[0x0104..0x0134], *LOGO_BYTES);
