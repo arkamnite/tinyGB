@@ -25,9 +25,14 @@ fn main() {
 
     let mut lexer = Token::lexer(input);
     let mut parser = Parser::new();
-    let _instr = parser.parse(&mut lexer).unwrap();
+    let instr = parser.parse(&mut lexer).unwrap();
 
-    let mut builder = RomBuilder::new();
+    let mut builder: RomBuilder = RomBuilder::new(rom_builder::CartridgeMapper::Mbc2);
+
+    for value in instr {
+        builder.write_values(value).unwrap();
+    }
+
     let rom = builder.build_rom();
 
     fs::write("test.gb", rom.data.as_slice()).ok();
