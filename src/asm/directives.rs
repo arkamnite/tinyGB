@@ -19,6 +19,16 @@ impl Section {
             Section::RomBank1 => 1,
         }
     }
+
+    pub fn get_section_size(&self) -> usize {
+        match self {
+            // There are only 4 bytes available before the header.
+            Section::EntrySection => 4,
+            // The header runs up until 0x150 in ROM Bank 0.
+            Section::RomBank0 => 0x4000 - 0x150,
+            Section::RomBank1 => 0x4000,
+        }
+    }
 }
 
 pub fn match_directive(directive: &str) -> Option<Directives> {

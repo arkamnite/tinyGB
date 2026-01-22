@@ -30,7 +30,7 @@ fn main() {
     let mut builder: RomBuilder = RomBuilder::new(rom_builder::CartridgeMapper::Mbc2);
 
     for value in instr {
-        builder.write_values(value).unwrap();
+        builder.write_value(value).unwrap();
     }
 
     let rom = builder.build_rom();

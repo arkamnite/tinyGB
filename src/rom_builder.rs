@@ -1,4 +1,4 @@
-use crate::parser::Value;
+use crate::{asm::directives::Section, parser::Value};
 
 const LOGO_BYTES: &[u8] = &[
     0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
@@ -139,7 +139,7 @@ impl RomBuilder {
         self.rom_banks[0].bytes[0x014d] = self.header_info.checksum;
     }
 
-    pub fn write_values(&mut self, value: Value) -> Result<&mut Self, String> {
+    pub fn write_value(&mut self, value: Value) -> Result<&mut Self, String> {
         match value {
             Value::Instruction {
                 bank_section,
@@ -158,14 +158,16 @@ impl RomBuilder {
                         }
 
                         for (_, &byte) in bytes.iter().enumerate() {
-                            self.rom_banks[0].bytes[4 - self.entry_cursor + 0x100] = byte;
+                            self.rom_banks[0].bytes[Section::EntrySection.get_section_size()
+                                - self.entry_cursor
+                                + 0x100] = byte;
                             self.entry_cursor = self.entry_cursor - 1;
                         }
                     }
                     crate::asm::directives::Section::RomBank0 => {
                         // Our cursor should always be offset by the end of the header.
                         if bytes.len()
-                            > (self.rom_banks[0].bytes.len() - self.rom_banks[0].cursor - 0x150)
+                            > (Section::RomBank0.get_section_size() - self.rom_banks[0].cursor)
                         {
                             return Err("Ran out of bytes for ROM bank 0!".to_string());
                         } else {
@@ -242,7 +244,11 @@ impl RomBuilder {
 
 #[cfg(test)]
 mod test {
-    use crate::rom_builder::{CartridgeMapper, RomBuilder, LOGO_BYTES};
+    use crate::{
+        asm::directives::Section,
+        parser::Value,
+        rom_builder::{CartridgeMapper, RomBuilder, LOGO_BYTES},
+    };
 
     #[test]
     /// The Game Boy boot ROM expects the 'logo bytes' to be found
@@ -254,5 +260,107 @@ mod test {
         let rom = builder.build_rom();
 
         assert_eq!(rom.data.as_slice()[0x0104..0x0134], *LOGO_BYTES);
+    }
+
+    #[test]
+    fn write_value_entry_ok() {
+        let mut builder = RomBuilder::new(CartridgeMapper::RomOnly);
+        let result: Result<&mut RomBuilder, String>;
+        result = builder.write_value(Value::Instruction {
+            bank_section: Section::EntrySection,
+            bytes: vec![0x0, 0xc3, 0x50, 0x1],
+        });
+        assert!(result.is_ok());
+        let rom = builder.build_rom();
+        assert_eq!(rom.data[0x100..0x104], [0x0, 0xc3, 0x50, 0x1]);
+    }
+
+    #[test]
+    fn write_value_entry_err() {
+        let mut builder = RomBuilder::new(CartridgeMapper::RomOnly);
+        let mut result: Result<&mut RomBuilder, String>;
+        for _ in 0..Section::EntrySection.get_section_size() {
+            result = builder.write_value(Value::Instruction {
+                bank_section: Section::EntrySection,
+                bytes: vec![0],
+            });
+            assert!(result.is_ok());
+        }
+        result = builder.write_value(Value::Instruction {
+            bank_section: Section::EntrySection,
+            bytes: vec![0],
+        });
+        assert!(result.is_err());
+
+        builder = RomBuilder::new(CartridgeMapper::RomOnly);
+        result = builder.write_value(Value::Instruction {
+            bank_section: Section::EntrySection,
+            bytes: vec![0; Section::EntrySection.get_section_size() + 1],
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn write_value_bank_0() {
+        let mut builder = RomBuilder::new(CartridgeMapper::RomOnly);
+        let mut result: Result<&mut RomBuilder, String>;
+
+        let mut test_bytes: Vec<u8> = Vec::new();
+        for i in 0..Section::RomBank0.get_section_size() {
+            test_bytes.push(i as u8);
+            result = builder.write_value(Value::Instruction {
+                bank_section: Section::RomBank0,
+                bytes: vec![i as u8],
+            });
+            assert!(result.is_ok());
+        }
+
+        result = builder.write_value(Value::Instruction {
+            bank_section: Section::RomBank0,
+            bytes: vec![0x0],
+        });
+        assert!(result.is_err());
+
+        let rom = builder.build_rom();
+        assert_eq!(rom.data[0x150..0x4000], *test_bytes.as_slice());
+
+        builder = RomBuilder::new(CartridgeMapper::RomOnly);
+        result = builder.write_value(Value::Instruction {
+            bank_section: Section::RomBank0,
+            bytes: vec![0x0; Section::RomBank0.get_section_size() + 1],
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn write_value_bank_1() {
+        let mut builder = RomBuilder::new(CartridgeMapper::RomOnly);
+        let mut result: Result<&mut RomBuilder, String>;
+
+        let mut test_bytes: Vec<u8> = Vec::new();
+        for i in 0..Section::RomBank1.get_section_size() {
+            test_bytes.push(i as u8);
+            result = builder.write_value(Value::Instruction {
+                bank_section: Section::RomBank1,
+                bytes: vec![i as u8],
+            });
+            assert!(result.is_ok());
+        }
+
+        result = builder.write_value(Value::Instruction {
+            bank_section: Section::RomBank1,
+            bytes: vec![0x0],
+        });
+        assert!(result.is_err());
+
+        let rom = builder.build_rom();
+        assert_eq!(rom.data[0x4000..0x8000], *test_bytes.as_slice());
+
+        builder = RomBuilder::new(CartridgeMapper::RomOnly);
+        result = builder.write_value(Value::Instruction {
+            bank_section: Section::RomBank1,
+            bytes: vec![0x0; Section::RomBank1.get_section_size() + 1],
+        });
+        assert!(result.is_err());
     }
 }
