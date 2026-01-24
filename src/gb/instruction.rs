@@ -101,7 +101,7 @@ pub struct InstructionDesc {
 impl InstructionDesc {
     pub fn encode(&self, operands: &[Operand]) -> Result<Vec<u8>, (String, Opcode)> {
         let mut bytes: Vec<u8> = vec![];
-        println!("Opcode: {:?}, Operands: {:?}", self.opcode, operands);
+        dbg!(self.opcode, operands);
         match self.opcode {
             Opcode::Nop => {
                 if operands.len() != self.operand_descriptions.len() {

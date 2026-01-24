@@ -28,6 +28,9 @@ fn register_callback(lex: &mut Lexer<Token>) -> Option<Register> {
 #[logos(skip r"[ \t]+")]
 #[logos(error = String)]
 pub enum Token {
+    #[end]
+    Eof,
+
     #[token("\n")]
     Newline,
 

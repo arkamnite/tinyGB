@@ -8,14 +8,14 @@ use crate::lexer::Token;
 use logos::{Lexer, Span};
 use strum_macros::{AsRefStr, IntoStaticStr};
 
-pub type ParserError = (String, Span);
+pub type ParserError = String;
 type Result<T> = std::result::Result<T, ParserError>;
 
 /// General opcode variants which have a 1:1 relationship
 /// with all the different identifier tokens that can be
 /// used to represent instructions.
 
-#[derive(IntoStaticStr, AsRefStr, Clone, Eq, PartialEq)]
+#[derive(Debug, IntoStaticStr, AsRefStr, Clone, Eq, PartialEq)]
 pub enum GeneralOpcode {
     #[strum(serialize = "nop")]
     Nop,
@@ -75,35 +75,28 @@ impl Parser {
                         match directive {
                             Directives::Section => self.parse_directive_section(lexer)?,
                             Directives::Entry => {
-                                return Err((
-                                    ("Unexpected .entry section").to_string(),
-                                    lexer.span(),
-                                ))
+                                return Err(("Unexpected .entry section").to_string())
                             }
                             Directives::Data => {
-                                return Err((
-                                    ("Unexpected .data section").to_string(),
-                                    lexer.span(),
-                                ))
+                                return Err(("Unexpected .data section").to_string())
                             }
                         }
                     } else {
-                        return Err((
-                            format!("Unsupported directive: {}", lexer.slice()).to_string(),
-                            lexer.span(),
-                        ));
+                        return Err(
+                            (format!("Unsupported directive: {}", lexer.slice()).to_string())
+                        );
                     }
                 }
                 Ok(Token::Identifier) => {
                     values.push(self.parse_identifier(lexer.slice(), lexer)?);
                 }
                 _ => {
-                    return Err(("Parser Error".to_owned(), lexer.span()));
+                    return Err("Parser Error".to_owned());
                 }
             };
         }
         if values.is_empty() {
-            Err((("No tokens provided?").to_owned(), lexer.span()))
+            Err(("No tokens provided?").to_owned())
         } else {
             return Ok(values);
         }
@@ -115,10 +108,7 @@ impl Parser {
             match token {
                 Ok(Token::Newline) => {
                     if expects_data_id {
-                        return Err((
-                            ("Unterminated .section directive?").to_string(),
-                            lexer.span(),
-                        ));
+                        return Err(("Unterminated .section directive?").to_string());
                     }
                 }
                 Ok(Token::Identifier) => {
@@ -134,29 +124,25 @@ impl Parser {
                                     return Ok(());
                                 }
                                 _ => {
-                                    return Err((
-                                        format!("Unsupported bank ID for .data directive: {}", id)
-                                            .to_string(),
-                                        lexer.span(),
-                                    ));
+                                    return Err(format!(
+                                        "Unsupported bank ID for .data directive: {}",
+                                        id
+                                    )
+                                    .to_string());
                                 }
                             },
                             Err(_) => {
-                                return Err((
-                                    format!(
-                                        "Unsupported bank ID for .data directive: {}",
-                                        lexer.slice()
-                                    )
-                                    .to_string(),
-                                    lexer.span(),
-                                ));
+                                return Err(format!(
+                                    "Unsupported bank ID for .data directive: {}",
+                                    lexer.slice()
+                                )
+                                .to_string());
                             }
                         }
                     } else {
-                        return Err((
-                            ("Unexpected identifier following .data directive!").to_string(),
-                            lexer.span(),
-                        ));
+                        return Err(
+                            ("Unexpected identifier following .data directive!").to_string()
+                        );
                     }
                 }
                 Ok(Token::Directive) => match match_directive(lexer.slice()) {
@@ -168,10 +154,9 @@ impl Parser {
                         expects_data_id = true;
                     }
                     _ => {
-                        return Err((
-                            ("Expected one of .entry or .data following .section!").to_string(),
-                            lexer.span(),
-                        ))
+                        return Err(
+                            ("Expected one of .entry or .data following .section!").to_string()
+                        )
                     }
                 },
                 _ => {}
@@ -199,7 +184,29 @@ impl Parser {
                 _ => todo!(),
             }
         }
-        Err(("Unexpected identifier found here".to_owned(), span))
+        Err("Unexpected identifier found here".to_owned())
+    }
+
+    fn match_instruction(
+        &mut self,
+        opcode: GeneralOpcode,
+        operands: &Vec<Operand>,
+    ) -> Result<Value> {
+        if let Some(instr_vec) = find_instruction(opcode.clone(), &operands) {
+            match instr_vec.encode(&operands.as_slice()) {
+                Ok(bytes) => {
+                    return Ok(Value::Instruction {
+                        bank_section: self.current_section.clone(),
+                        bytes,
+                    });
+                }
+                Err(e) => {
+                    return Err(format!("{}, opcode: {:?}", e.0, e.1));
+                }
+            }
+        } else {
+            return Err(format!("unable to match instruction: {}", opcode.as_ref()).to_owned());
+        }
     }
 
     fn parse_instruction(
@@ -208,34 +215,17 @@ impl Parser {
         lexer: &mut logos::Lexer<'_, Token>,
     ) -> Result<Value> {
         let mut parsed_operands: Vec<Operand> = vec![];
-        let span = lexer.span();
 
         while let Some(token) = lexer.next() {
+            dbg!(lexer.slice());
             match token {
-                Ok(Token::Newline) => {
-                    if let Some(instr_vec) = find_instruction(opcode.clone(), &parsed_operands) {
-                        match instr_vec.encode(&parsed_operands.as_slice()) {
-                            Ok(bytes) => {
-                                return Ok(Value::Instruction {
-                                    bank_section: self.current_section.clone(),
-                                    bytes,
-                                });
-                            }
-                            Err(e) => {
-                                return Err((format!("{}, opcode: {:?}", e.0, e.1), span));
-                            }
-                        }
-                    } else {
-                        return Err((
-                            format!("unable to match instruction: {}", opcode.as_ref()).to_owned(),
-                            span,
-                        ));
-                    }
+                Ok(Token::Newline | Token::Eof) => {
+                    return self.match_instruction(opcode, &parsed_operands)
                 }
                 Ok(Token::Identifier) => {
                     // Another instruction?
                     if let Some(_) = Parser::match_general_opcode(lexer.slice()) {
-                        return Err(("unexpected instruction identifier in line".to_owned(), span));
+                        return Err("unexpected instruction identifier in line".to_owned());
                     }
                 }
                 Ok(Token::Register(r)) => {
@@ -243,7 +233,7 @@ impl Parser {
                     match try_operand {
                         Some(op) => parsed_operands.push(op),
                         None => {
-                            return Err((("Invalid operand provided!").to_string(), span));
+                            return Err(("Invalid operand provided!").to_string());
                         }
                     }
                 }
@@ -252,7 +242,7 @@ impl Parser {
                     match try_operand {
                         Some(op) => parsed_operands.push(op),
                         None => {
-                            return Err((("Invalid operand provided!").to_string(), span));
+                            return Err(("Invalid operand provided!").to_string());
                         }
                     }
                 }
@@ -261,7 +251,7 @@ impl Parser {
                     match try_operand {
                         Some(op) => parsed_operands.push(op),
                         None => {
-                            return Err((("Invalid operand provided!").to_string(), span));
+                            return Err(("Invalid operand provided!").to_string());
                         }
                     }
                 }
@@ -270,7 +260,7 @@ impl Parser {
                     match try_operand {
                         Some(op) => parsed_operands.push(op),
                         None => {
-                            return Err((("Invalid operand provided!").to_string(), span));
+                            return Err(("Invalid operand provided!").to_string());
                         }
                     }
                 }
@@ -287,7 +277,7 @@ impl Parser {
                             if let Some(op) = Operand::try_from(Token::IntegerPointer(ip)).ok() {
                                 parsed_operands.push(op);
                             } else {
-                                return Err((("Invalid operand provided!").to_string(), span));
+                                return Err(("Invalid operand provided!").to_string());
                             }
                         }
                         _ => todo!(),
@@ -302,6 +292,6 @@ impl Parser {
                 _ => todo!(),
             }
         }
-        Err(("unexpected end of instruction".to_owned(), span))
+        self.match_instruction(opcode, &parsed_operands)
     }
 }

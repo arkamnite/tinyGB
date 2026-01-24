@@ -3,6 +3,8 @@ use std::fs;
 use crate::{lexer::Token, rom_builder::RomBuilder};
 use logos::Logos;
 
+use std::env;
+
 mod asm;
 mod gb;
 mod lexer;
@@ -12,18 +14,11 @@ mod rom_builder;
 use parser::Parser;
 
 fn main() {
-    let input = "
-    .section .entry
-        nop
-        jp $0150
+    let args: Vec<String> = env::args().collect();
+    let message = fs::read_to_string(&args[1]).unwrap();
+    dbg!(message.clone());
 
-    .section .data 0
-        ld %a, $c
-        ld $c, %a
-        ld %a, %c
-    ";
-
-    let mut lexer = Token::lexer(input);
+    let mut lexer = Token::lexer(message.as_str());
     let mut parser = Parser::new();
     let instr = parser.parse(&mut lexer).unwrap();
 
