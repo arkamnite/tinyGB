@@ -258,42 +258,23 @@ impl Parser {
                         return Err("unexpected instruction identifier in line".to_owned());
                     }
                 }
-                Ok(Token::Register(r)) => {
-                    let try_operand = Operand::try_from(Token::Register(r)).ok();
-                    match try_operand {
-                        Some(op) => parsed_operands.push(op),
-                        None => {
-                            return Err(("Invalid operand provided!").to_string());
+                Ok(
+                    Token::Register(_)
+                    | Token::Register16(_)
+                    | Token::RegisterPtr(_)
+                    | Token::RegisterPtr16(_),
+                ) => match token {
+                    Ok(t) => {
+                        let try_operand = Operand::try_from(t);
+                        match try_operand {
+                            Ok(op) => parsed_operands.push(op),
+                            Err(op_err) => return Err(op_err.0.to_string()),
                         }
                     }
-                }
-                Ok(Token::RegisterPtr(p)) => {
-                    let try_operand = Operand::try_from(Token::RegisterPtr(p)).ok();
-                    match try_operand {
-                        Some(op) => parsed_operands.push(op),
-                        None => {
-                            return Err(("Invalid operand provided!").to_string());
-                        }
+                    Err(token_error) => {
+                        return Err(token_error);
                     }
-                }
-                Ok(Token::Register16(r)) => {
-                    let try_operand = Operand::try_from(Token::Register16(r)).ok();
-                    match try_operand {
-                        Some(op) => parsed_operands.push(op),
-                        None => {
-                            return Err(("Invalid operand provided!").to_string());
-                        }
-                    }
-                }
-                Ok(Token::RegisterPtr16(p)) => {
-                    let try_operand = Operand::try_from(Token::RegisterPtr16(p)).ok();
-                    match try_operand {
-                        Some(op) => parsed_operands.push(op),
-                        None => {
-                            return Err(("Invalid operand provided!").to_string());
-                        }
-                    }
-                }
+                },
                 Ok(Token::Integer(i)) => {
                     // Check if this is wider than u8, demote if not.
                     // Also check for signed range based on previous
