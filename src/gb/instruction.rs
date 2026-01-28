@@ -43,26 +43,6 @@ impl Operand {
     }
 }
 
-impl Encodable for Operand {
-    fn encode(&self) -> u8 {
-        match self {
-            Operand::ARegister(aregister) => aregister.encode(),
-            Operand::CRegisterPtr(cregister_ptr) => cregister_ptr.encode(),
-            Operand::Register8(register8) => register8.encode(),
-            Operand::RegisterPtr8(register_ptr8) => todo!(),
-            Operand::Register16(register16) => register16.encode(),
-            Operand::RegisterPtr16(register_ptr16) => todo!(),
-            Operand::HLRegisterPtr(hlregister_ptr) => todo!(),
-            Operand::PushPopRegister16(push_pop_register16) => push_pop_register16.encode(),
-            Operand::Imm8(n) => *n,
-            Operand::Imm16(n) => todo!(),
-            Operand::Ptr8(p) => todo!(),
-            Operand::Ptr16(p) => todo!(),
-            Operand::SignedImm4(n) => todo!(),
-        }
-    }
-}
-
 impl TryFrom<Token> for Operand {
     type Error = (&'static str, Token);
 
