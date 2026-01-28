@@ -276,10 +276,28 @@ impl Parser {
                     }
                 },
                 Ok(Token::Integer(i)) => {
-                    // Check if this is wider than u8, demote if not.
-                    // Also check for signed range based on previous
-                    // instruction?
-                    todo!()
+                    // We will eventually need to check for signed values too.
+                    match opcode {
+                        GeneralOpcode::Add
+                        | GeneralOpcode::AddCarry
+                        | GeneralOpcode::Sub
+                        | GeneralOpcode::SubCarry
+                        | GeneralOpcode::And
+                        | GeneralOpcode::Compare
+                        | GeneralOpcode::Or
+                        | GeneralOpcode::Xor => match u8::try_from(i) {
+                            // Once we add 16-bit arithmetic, we are going to have to check whether
+                            // or not the previous operand was a 16-bit register pair as the mnemonic
+                            // is the same for 8-bit and 16-bit arithmetic - there is no point creating
+                            // another generic opcode for this.
+                            Ok(int8) => parsed_operands.push(Operand::Imm8(int8)),
+                            Err(_) => return Err(
+                                "Only 8-bit immediate values can be used with this instruction!"
+                                    .to_string(),
+                            ),
+                        },
+                        _ => parsed_operands.push(Operand::Imm16(i)),
+                    }
                 }
                 Ok(Token::IntegerPointer(ip)) => {
                     // Check if wider than u8, demote if not.
