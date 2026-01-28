@@ -29,6 +29,26 @@ pub enum GeneralOpcode {
     LoadDecrement,
     #[strum(serialize = "jp")]
     Jump,
+    #[strum(serialize = "add")]
+    Add,
+    #[strum(serialize = "adc")]
+    AddCarry,
+    #[strum(serialize = "sub")]
+    Sub,
+    #[strum(serialize = "sbc")]
+    SubCarry,
+    #[strum(serialize = "and")]
+    And,
+    #[strum(serialize = "or")]
+    Or,
+    #[strum(serialize = "xor")]
+    Xor,
+    #[strum(serialize = "cp")]
+    Compare,
+    #[strum(serialize = "inc")]
+    Increment,
+    #[strum(serialize = "dec")]
+    Decrement,
 }
 
 pub enum Value {
@@ -60,6 +80,16 @@ impl Parser {
             val if val == GeneralOpcode::LoadDecrement.as_ref() => {
                 Some(GeneralOpcode::LoadDecrement)
             }
+            val if val == GeneralOpcode::Add.as_ref() => Some(GeneralOpcode::Add),
+            val if val == GeneralOpcode::AddCarry.as_ref() => Some(GeneralOpcode::AddCarry),
+            val if val == GeneralOpcode::Sub.as_ref() => Some(GeneralOpcode::Sub),
+            val if val == GeneralOpcode::SubCarry.as_ref() => Some(GeneralOpcode::SubCarry),
+            val if val == GeneralOpcode::And.as_ref() => Some(GeneralOpcode::And),
+            val if val == GeneralOpcode::Or.as_ref() => Some(GeneralOpcode::Or),
+            val if val == GeneralOpcode::Xor.as_ref() => Some(GeneralOpcode::Xor),
+            val if val == GeneralOpcode::Compare.as_ref() => Some(GeneralOpcode::Compare),
+            val if val == GeneralOpcode::Increment.as_ref() => Some(GeneralOpcode::Increment),
+            val if val == GeneralOpcode::Decrement.as_ref() => Some(GeneralOpcode::Decrement),
             val if val == GeneralOpcode::Jump.as_ref() => Some(GeneralOpcode::Jump),
             _ => None,
         }

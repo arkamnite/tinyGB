@@ -43,6 +43,26 @@ impl Operand {
     }
 }
 
+impl Encodable for Operand {
+    fn encode(&self) -> u8 {
+        match self {
+            Operand::ARegister(aregister) => aregister.encode(),
+            Operand::CRegisterPtr(cregister_ptr) => cregister_ptr.encode(),
+            Operand::Register8(register8) => register8.encode(),
+            Operand::RegisterPtr8(register_ptr8) => todo!(),
+            Operand::Register16(register16) => register16.encode(),
+            Operand::RegisterPtr16(register_ptr16) => todo!(),
+            Operand::HLRegisterPtr(hlregister_ptr) => todo!(),
+            Operand::PushPopRegister16(push_pop_register16) => push_pop_register16.encode(),
+            Operand::Imm8(n) => *n,
+            Operand::Imm16(n) => todo!(),
+            Operand::Ptr8(p) => todo!(),
+            Operand::Ptr16(p) => todo!(),
+            Operand::SignedImm4(n) => todo!(),
+        }
+    }
+}
+
 impl TryFrom<Token> for Operand {
     type Error = (&'static str, Token);
 
@@ -102,51 +122,36 @@ impl InstructionDesc {
     pub fn encode(&self, operands: &[Operand]) -> Result<Vec<u8>, (String, Opcode)> {
         let mut bytes: Vec<u8> = vec![];
         dbg!(self.opcode, operands);
+        if operands.len() != self.operand_descriptions.len() {
+            return Err((
+                ("Incorrect number of operands provided for instruction!").to_string(),
+                self.opcode,
+            ));
+        }
         match self.opcode {
             Opcode::Nop => {
-                if operands.len() != self.operand_descriptions.len() {
-                    Err((
-                        ("Incorrect number of operands provided for instruction!").to_string(),
-                        Opcode::Nop,
-                    ))
-                } else {
-                    bytes.push(self.base);
-                    Ok(bytes)
-                }
+                bytes.push(self.base);
+                Ok(bytes)
             }
             Opcode::Stop => {
-                if operands.len() != self.operand_descriptions.len() {
-                    Err((
-                        ("Incorrect number of operands provided for instruction!").to_string(),
-                        Opcode::Stop,
-                    ))
-                } else {
-                    bytes.push(self.base);
-                    Ok(bytes)
-                }
+                bytes.push(self.base);
+                Ok(bytes)
             }
             Opcode::LoadRdRr => {
-                if operands.len() != self.operand_descriptions.len() {
+                if let (Operand::Register8(rd), Operand::Register8(rr)) =
+                    (operands[0].clone(), operands[1].clone())
+                {
+                    bytes.push(
+                        self.base
+                            | rd.encode() << self.operand_descriptions[0].shift
+                            | rr.encode() << self.operand_descriptions[1].shift,
+                    );
+                    Ok(bytes)
+                } else {
                     Err((
-                        ("Incorrect number of operands provided for instruction!").to_string(),
+                        ("Incorrect operands provided for instruction!").to_string(),
                         Opcode::LoadRdRr,
                     ))
-                } else {
-                    if let (Operand::Register8(rd), Operand::Register8(rr)) =
-                        (operands[0].clone(), operands[1].clone())
-                    {
-                        bytes.push(
-                            self.base
-                                | rd.encode() << self.operand_descriptions[0].shift
-                                | rr.encode() << self.operand_descriptions[1].shift,
-                        );
-                        Ok(bytes)
-                    } else {
-                        Err((
-                            ("Incorrect operands provided for instruction!").to_string(),
-                            Opcode::LoadRdRr,
-                        ))
-                    }
                 }
             }
             Opcode::LoadRdImm8 => todo!(),
@@ -156,48 +161,34 @@ impl InstructionDesc {
             Opcode::LoadARegPtr16 => todo!(),
             Opcode::LoadRegPtr16AReg => todo!(),
             Opcode::LoadRdRegPtr8 => {
-                if operands.len() != self.operand_descriptions.len() {
+                if let (Some(Operand::ARegister(_)), Operand::CRegisterPtr(_)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    Ok(bytes)
+                } else {
                     Err((
-                        ("Incorrect number of operands provided for instruction!").to_string(),
+                        ("Incorrect operands provided for instruction!").to_string(),
                         Opcode::LoadRdRegPtr8,
                     ))
-                } else {
-                    if let (Some(Operand::ARegister(_)), Operand::CRegisterPtr(_)) = (
-                        operands[0].clone().try_register8_to_aregister(),
-                        operands[1].clone(),
-                    ) {
-                        bytes.push(self.base);
-                        Ok(bytes)
-                    } else {
-                        Err((
-                            ("Incorrect operands provided for instruction!").to_string(),
-                            Opcode::LoadRdRegPtr8,
-                        ))
-                    }
                 }
             }
             Opcode::LoadRegPtr8Rr => {
-                if operands.len() != self.operand_descriptions.len() {
+                if let (
+                    Operand::CRegisterPtr(CRegisterPtr::C),
+                    Some(Operand::ARegister(ARegister::A)),
+                ) = (
+                    operands[0].clone(),
+                    operands[1].clone().try_register8_to_aregister(),
+                ) {
+                    bytes.push(self.base);
+                    Ok(bytes)
+                } else {
                     Err((
-                        ("Incorrect number of operands provided for instruction!").to_string(),
+                        ("Incorrect operands provided for instruction!").to_string(),
                         Opcode::LoadRegPtr8Rr,
                     ))
-                } else {
-                    if let (
-                        Operand::CRegisterPtr(CRegisterPtr::C),
-                        Some(Operand::ARegister(ARegister::A)),
-                    ) = (
-                        operands[0].clone(),
-                        operands[1].clone().try_register8_to_aregister(),
-                    ) {
-                        bytes.push(self.base);
-                        Ok(bytes)
-                    } else {
-                        Err((
-                            ("Incorrect operands provided for instruction!").to_string(),
-                            Opcode::LoadRegPtr8Rr,
-                        ))
-                    }
                 }
             }
             Opcode::LoadRdImmPtr8 => todo!(),
@@ -209,25 +200,366 @@ impl InstructionDesc {
             Opcode::LoadIncRegPtr16Rr => todo!(),
             Opcode::LoadDecRegPtr16Rr => todo!(),
             Opcode::JumpPtr16 => {
-                if operands.len() != self.operand_descriptions.len() {
-                    Err((
-                        ("Incorrect number of operands provided for instruction!").to_string(),
-                        Opcode::JumpPtr16,
-                    ))
+                if let Operand::Ptr16(addr) = operands[0] {
+                    bytes.push(self.base);
+                    bytes.push(addr as u8);
+                    bytes.push((addr >> 8) as u8);
+                    Ok(bytes)
                 } else {
-                    if let Operand::Ptr16(addr) = operands[0] {
-                        bytes.push(self.base);
-                        bytes.push(addr as u8);
-                        bytes.push((addr >> 8) as u8);
-                        Ok(bytes)
-                    } else {
-                        Err((
-                            ("Incorrect operands provided for instruction!").to_string(),
-                            Opcode::Stop,
-                        ))
-                    }
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        Opcode::Stop,
+                    ))
                 }
             }
+            Opcode::AddARegRr => {
+                if let (Some(Operand::ARegister(_)), Operand::Register8(rr)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base | rr.encode());
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::AddARegImm8 => {
+                if let (Some(Operand::ARegister(_)), Operand::Imm8(n)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    bytes.push(n);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::AddARegHLRegPtr => {
+                if let (Some(Operand::ARegister(_)), Operand::HLRegisterPtr(_)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::AddCarryARegRr => {
+                if let (Some(Operand::ARegister(_)), Operand::Register8(rr)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base | rr.encode());
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::AddCarryARegImm8 => {
+                if let (Some(Operand::ARegister(_)), Operand::Imm8(n)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    bytes.push(n);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::AddCarryARegHLRegPtr => {
+                if let (Some(Operand::ARegister(_)), Operand::HLRegisterPtr(_)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::SubARegRr => {
+                if let (Some(Operand::ARegister(_)), Operand::Register8(rr)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base | rr.encode());
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::SubARegImm8 => {
+                if let (Some(Operand::ARegister(_)), Operand::Imm8(n)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    bytes.push(n);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::SubARegHLRegPtr => {
+                if let (Some(Operand::ARegister(_)), Operand::HLRegisterPtr(_)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::SubCarryARegRr => {
+                if let (Some(Operand::ARegister(_)), Operand::Register8(rr)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base | rr.encode());
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::SubCarryARegImm8 => {
+                if let (Some(Operand::ARegister(_)), Operand::Imm8(n)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    bytes.push(n);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::SubCarryARegHLRegPtr => {
+                if let (Some(Operand::ARegister(_)), Operand::HLRegisterPtr(_)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::AndARegRr => {
+                if let (Some(Operand::ARegister(_)), Operand::Register8(rr)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base | rr.encode());
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::AndARegImm8 => {
+                if let (Some(Operand::ARegister(_)), Operand::Imm8(n)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    bytes.push(n);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::AndARegHLRegPtr => {
+                if let (Some(Operand::ARegister(_)), Operand::HLRegisterPtr(_)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::OrARegRr => {
+                if let (Some(Operand::ARegister(_)), Operand::Register8(rr)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base | rr.encode());
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::OrARegImm8 => {
+                if let (Some(Operand::ARegister(_)), Operand::Imm8(n)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    bytes.push(n);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::OrARegHLRegPtr => {
+                if let (Some(Operand::ARegister(_)), Operand::HLRegisterPtr(_)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::XorARegRr => {
+                if let (Some(Operand::ARegister(_)), Operand::Register8(rr)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base | rr.encode());
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::XorARegImm8 => {
+                if let (Some(Operand::ARegister(_)), Operand::Imm8(n)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    bytes.push(n);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::XorARegHLRegPtr => {
+                if let (Some(Operand::ARegister(_)), Operand::HLRegisterPtr(_)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::CpARegRr => {
+                if let (Some(Operand::ARegister(_)), Operand::Register8(rr)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base | rr.encode());
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::CpARegImm8 => {
+                if let (Some(Operand::ARegister(_)), Operand::Imm8(n)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    bytes.push(n);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::CpARegHLRegPtr => {
+                if let (Some(Operand::ARegister(_)), Operand::HLRegisterPtr(_)) = (
+                    operands[0].clone().try_register8_to_aregister(),
+                    operands[1].clone(),
+                ) {
+                    bytes.push(self.base);
+                    Ok(bytes)
+                } else {
+                    Err((
+                        ("Incorrect operands provided for instruction!").to_string(),
+                        self.opcode,
+                    ))
+                }
+            }
+            Opcode::IncRd => todo!(),
+            Opcode::IncHLRegPtr => todo!(),
+            Opcode::DecRd => todo!(),
+            Opcode::DecHLRegPtr => todo!(),
         }
     }
 }
@@ -285,8 +617,84 @@ pub enum Opcode {
     // ldd $hl, %a
     LoadDecRegPtr16Rr,
 
+    // 8-bit arithmetic + logic instructions
+    // add %a, %rr
+    AddARegRr,
+    // add %a, n
+    AddARegImm8,
+    // add %a, $hl
+    AddARegHLRegPtr,
+
+    // adc %a, %rr
+    AddCarryARegRr,
+    // adc %a, n
+    AddCarryARegImm8,
+    // adc %a, $hl
+    AddCarryARegHLRegPtr,
+
+    // sub %a, %rr
+    SubARegRr,
+    // sub %a, n
+    SubARegImm8,
+    // sub %a, $hl
+    SubARegHLRegPtr,
+
+    // sbc %a, %rr
+    SubCarryARegRr,
+    // sbc %a, n
+    SubCarryARegImm8,
+    // sbc %a, $hl
+    SubCarryARegHLRegPtr,
+
+    // and %a, %rr
+    AndARegRr,
+    // and %a, n
+    AndARegImm8,
+    // and %a, $hl
+    AndARegHLRegPtr,
+
+    // or %a, %rr
+    OrARegRr,
+    // or %a, n
+    OrARegImm8,
+    // or %a, $hl
+    OrARegHLRegPtr,
+
+    // xor %a, %rr
+    XorARegRr,
+    // xor %a, n
+    XorARegImm8,
+    // xor %a, $hl
+    XorARegHLRegPtr,
+
+    // cp %a, %rr
+    CpARegRr,
+    // cp %a, n
+    CpARegImm8,
+    // cp %a, $hl
+    CpARegHLRegPtr,
+
+    // inc %rd
+    IncRd,
+    // inc $hl
+    IncHLRegPtr,
+    // dec %rd
+    DecRd,
+    // dec $hl
+    DecHLRegPtr,
+
     // jp $nn
     JumpPtr16,
+}
+
+fn try_operands(descriptions: &[OperandDesc], operands: &[Operand]) -> bool {
+    if descriptions.len() == operands.len() {
+        zip(descriptions, operands).fold(true, |acc, (desc, op)| {
+            acc && desc.operand_type == OperandDiscriminants::from(op)
+        })
+    } else {
+        false
+    }
 }
 
 static OPCODES: &[InstructionDesc] = &[
@@ -556,6 +964,402 @@ static OPCODES: &[InstructionDesc] = &[
                 shift: 0,
             },
         ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Add,
+        opcode: Opcode::AddARegRr,
+        base: 0b10000000,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Add,
+        opcode: Opcode::AddARegImm8,
+        base: 0b11000110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Imm8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Add,
+        opcode: Opcode::AddARegHLRegPtr,
+        base: 0b10000110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::AddCarry,
+        opcode: Opcode::AddCarryARegRr,
+        base: 0b10001000,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::AddCarry,
+        opcode: Opcode::AddCarryARegImm8,
+        base: 0b11001110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Imm8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::AddCarry,
+        opcode: Opcode::AddCarryARegHLRegPtr,
+        base: 0b10001110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Sub,
+        opcode: Opcode::SubARegRr,
+        base: 0b10010000,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Sub,
+        opcode: Opcode::SubARegImm8,
+        base: 0b11010110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Imm8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Sub,
+        opcode: Opcode::SubARegHLRegPtr,
+        base: 0b10010110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::SubCarry,
+        opcode: Opcode::SubCarryARegRr,
+        base: 0b10011000,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::SubCarry,
+        opcode: Opcode::SubCarryARegImm8,
+        base: 0b11011110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Imm8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::SubCarry,
+        opcode: Opcode::SubCarryARegHLRegPtr,
+        base: 0b10011110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::And,
+        opcode: Opcode::AndARegRr,
+        base: 0b10100000,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::And,
+        opcode: Opcode::AndARegImm8,
+        base: 0b11100110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Imm8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::And,
+        opcode: Opcode::AndARegHLRegPtr,
+        base: 0b10100110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Or,
+        opcode: Opcode::OrARegRr,
+        base: 0b10110000,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Or,
+        opcode: Opcode::OrARegImm8,
+        base: 0b11110110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Imm8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Or,
+        opcode: Opcode::OrARegHLRegPtr,
+        base: 0b10110110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Xor,
+        opcode: Opcode::XorARegRr,
+        base: 0b10101000,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Xor,
+        opcode: Opcode::XorARegImm8,
+        base: 0b11101110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Imm8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Xor,
+        opcode: Opcode::XorARegHLRegPtr,
+        base: 0b10101110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Compare,
+        opcode: Opcode::CpARegRr,
+        base: 0b10111000,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Register8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Compare,
+        opcode: Opcode::CpARegImm8,
+        base: 0b11111110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::Imm8,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Compare,
+        opcode: Opcode::CpARegHLRegPtr,
+        base: 0b10111110,
+        operand_descriptions: &[
+            OperandDesc {
+                operand_type: OperandDiscriminants::ARegister,
+                shift: 0,
+            },
+            OperandDesc {
+                operand_type: OperandDiscriminants::HLRegisterPtr,
+                shift: 0,
+            },
+        ],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Increment,
+        opcode: Opcode::IncRd,
+        base: 0b00000100,
+        operand_descriptions: &[OperandDesc {
+            operand_type: OperandDiscriminants::Register8,
+            shift: 3,
+        }],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Increment,
+        opcode: Opcode::IncHLRegPtr,
+        base: 0b00110100,
+        operand_descriptions: &[OperandDesc {
+            operand_type: OperandDiscriminants::HLRegisterPtr,
+            shift: 0,
+        }],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Decrement,
+        opcode: Opcode::DecRd,
+        base: 0b00000101,
+        operand_descriptions: &[OperandDesc {
+            operand_type: OperandDiscriminants::Register8,
+            shift: 3,
+        }],
+    },
+    InstructionDesc {
+        generic_opcode: GeneralOpcode::Decrement,
+        opcode: Opcode::DecHLRegPtr,
+        base: 0b00110101,
+        operand_descriptions: &[OperandDesc {
+            operand_type: OperandDiscriminants::HLRegisterPtr,
+            shift: 0,
+        }],
     },
     InstructionDesc {
         generic_opcode: GeneralOpcode::Jump,
