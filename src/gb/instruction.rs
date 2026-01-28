@@ -95,7 +95,8 @@ impl TryFrom<Token> for Operand {
             Token::RegisterPtr16(register) => match register {
                 crate::gb::register::Register::BC => Ok(Operand::RegisterPtr16(RegisterPtr16::Bc)),
                 crate::gb::register::Register::DE => Ok(Operand::RegisterPtr16(RegisterPtr16::De)),
-                _ => Err(("Only BC and DE register pairs can be used as general-purpose 16-bit register pointers", value))
+                crate::gb::register::Register::HL => Ok(Operand::HLRegisterPtr(HLRegisterPtr::Hl)),
+                _ => Err(("Only BC, DE, and HL register pairs can be used as general-purpose 16-bit register pointers", value))
             },
             Token::Integer(_) => todo!(),
             Token::IntegerPointer(addr) => Ok(Operand::Ptr16(addr)),
