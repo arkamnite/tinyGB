@@ -54,18 +54,33 @@ pub enum GeneralOpcode {
 pub enum Value {
     Instruction {
         bank_section: Section,
+        function: Option<String>,
         bytes: Vec<u8>,
     },
 }
 
+struct Function {
+    scope: FunctionScope,
+    defined: bool,
+}
+
+#[derive(Clone, Copy)]
+enum FunctionScope {
+    Global,
+}
+
 pub struct Parser {
     current_section: Section,
+    current_function: Option<String>,
+    functions: HashMap<String, Function>,
 }
 
 impl Parser {
     pub fn new() -> Parser {
         Parser {
             current_section: Section::EntrySection,
+            current_function: None,
+            functions: HashMap::new(),
         }
     }
 
@@ -104,6 +119,7 @@ impl Parser {
                     if let Some(directive) = match_directive(lexer.slice()) {
                         match directive {
                             Directives::Section => self.parse_directive_section(lexer)?,
+                            Directives::GlobalLabel => self.parse_directive_global(lexer)?,
                             Directives::Entry => {
                                 return Err(("Unexpected .entry section").to_string())
                             }
@@ -195,14 +211,69 @@ impl Parser {
         return Ok(());
     }
 
+    fn parse_directive_global(&mut self, lexer: &mut logos::Lexer<'_, Token>) -> Result<()> {
+        // Expect to parse an identifier for this label.
+        if let Some(t1) = lexer.next() {
+            match t1 {
+                Ok(Token::Identifier) => {
+                    let identifier = lexer.slice();
+
+                    if let Some(t2) = lexer.next() {
+                        match t2 {
+                            Ok(Token::Newline) => {
+                                match self.functions.insert(
+                                    identifier.to_string(),
+                                    Function {
+                                        scope: FunctionScope::Global,
+                                        defined: false,
+                                    },
+                                ) {
+                                    Some(_) => Err(".global function already defined!".to_string()),
+                                    None => Ok(()),
+                                }
+                            }
+                            _ => {
+                                Err(".global directives expect a newline after the label"
+                                    .to_string())
+                            }
+                        }
+                    } else {
+                        Err(".global directives expect a newline after the label".to_string())
+                    }
+                }
+                Ok(_) => Err(".global directive expects an identifier!".to_string()),
+                Err(e) => Err(e),
+            }
+        } else {
+            Err(".global directive expects an identifier!".to_string())
+        }
+        // Expect to then parse a colon
+    }
+
     fn parse_identifier(
         &mut self,
         identifier_token: &str,
         lexer: &mut logos::Lexer<'_, Token>,
     ) -> Result<Value> {
-        let span = lexer.span();
+        // check if this is a function definition
+        if let Some(function) = self.functions.get(lexer.slice()) {
+            if let Some(token) = lexer.next() {
+                match token {
+                    Ok(Token::Colon) => {
+                        if function.defined {
+                            return Err(
+                                format!("function {} redefined!", lexer.slice()).to_string()
+                            );
+                        } else {
+                            self.current_function = Some(lexer.slice().to_string());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
 
-        // match the current token
+        // match the current token to an instruction
         if let Some(opcode) = Parser::match_general_opcode(identifier_token) {
             return self.parse_instruction(opcode, lexer);
         }
@@ -227,6 +298,7 @@ impl Parser {
                 Ok(bytes) => {
                     return Ok(Value::Instruction {
                         bank_section: self.current_section.clone(),
+                        function: self.current_function.clone(),
                         bytes,
                     });
                 }
@@ -257,6 +329,28 @@ impl Parser {
                     if let Some(_) = Parser::match_general_opcode(lexer.slice()) {
                         return Err("unexpected instruction identifier in line".to_owned());
                     }
+                    // TODO: rombuilder's current implementation means that we have to handle
+                    // relocations within the parser; rombuilder only accepts a series of bytes
+                    // for each instruction, and then writes them to memory based on the current
+                    // cursor position within the rombuilder state. This makes it impossible to
+                    // pass labels to rombuilder, as it only knows how to consume bytes and changing
+                    // this would mean changing the entire definition of a Value::Instruction as well
+                    // as the Instruction implementation.
+                    //
+                    // This means that we need to keep track of the cursor in the parser now- this
+                    // is doable since we are already encoding the section each instruction belongs
+                    // to- and then add the cursor data to each Value::Instruction.
+                    //
+                    // Value::Instruction therefore needs to contain a cursor for the given instruction,
+                    // and rombuilder shouldn't keep track of the cursor for a given instruction. "Section"
+                    // limits may not always exist on platforms other than Game Boy, but when they do,
+                    // they can be enforced in the parser.
+                    //
+                    // Another thing to bear in mind: a 'global' function can only live in certain sections
+                    // (i.e. bank 0), and if the parser is going to handle the locations of each label,
+                    // it should have an organised way of arranging data on a per-section basis.
+                    // Box<[FunctionData]> or similar might be good.
+                    todo!()
                 }
                 Ok(
                     Token::Register(_)

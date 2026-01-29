@@ -144,6 +144,7 @@ impl RomBuilder {
             Value::Instruction {
                 bank_section,
                 bytes,
+                function,
             } => {
                 if bank_section.get_section_index() >= self.max_banks {
                     return Err("Provided section ID is out of bounds!".to_string());
@@ -269,6 +270,7 @@ mod test {
         result = builder.write_value(Value::Instruction {
             bank_section: Section::EntrySection,
             bytes: vec![0x0, 0xc3, 0x50, 0x1],
+            function: None,
         });
         assert!(result.is_ok());
         let rom = builder.build_rom();
@@ -283,12 +285,14 @@ mod test {
             result = builder.write_value(Value::Instruction {
                 bank_section: Section::EntrySection,
                 bytes: vec![0],
+                function: None,
             });
             assert!(result.is_ok());
         }
         result = builder.write_value(Value::Instruction {
             bank_section: Section::EntrySection,
             bytes: vec![0],
+            function: None,
         });
         assert!(result.is_err());
 
@@ -296,6 +300,7 @@ mod test {
         result = builder.write_value(Value::Instruction {
             bank_section: Section::EntrySection,
             bytes: vec![0; Section::EntrySection.get_section_size() + 1],
+            function: None,
         });
         assert!(result.is_err());
     }
@@ -311,6 +316,7 @@ mod test {
             result = builder.write_value(Value::Instruction {
                 bank_section: Section::RomBank0,
                 bytes: vec![i as u8],
+                function: None,
             });
             assert!(result.is_ok());
         }
@@ -318,6 +324,7 @@ mod test {
         result = builder.write_value(Value::Instruction {
             bank_section: Section::RomBank0,
             bytes: vec![0x0],
+            function: None,
         });
         assert!(result.is_err());
 
@@ -328,6 +335,7 @@ mod test {
         result = builder.write_value(Value::Instruction {
             bank_section: Section::RomBank0,
             bytes: vec![0x0; Section::RomBank0.get_section_size() + 1],
+            function: None,
         });
         assert!(result.is_err());
     }
@@ -343,6 +351,7 @@ mod test {
             result = builder.write_value(Value::Instruction {
                 bank_section: Section::RomBank1,
                 bytes: vec![i as u8],
+                function: None,
             });
             assert!(result.is_ok());
         }
@@ -350,6 +359,7 @@ mod test {
         result = builder.write_value(Value::Instruction {
             bank_section: Section::RomBank1,
             bytes: vec![0x0],
+            function: None,
         });
         assert!(result.is_err());
 
@@ -360,6 +370,7 @@ mod test {
         result = builder.write_value(Value::Instruction {
             bank_section: Section::RomBank1,
             bytes: vec![0x0; Section::RomBank1.get_section_size() + 1],
+            function: None,
         });
         assert!(result.is_err());
     }
